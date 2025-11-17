@@ -10,22 +10,9 @@
 		076539A42EBDA77C007F85C5 /* TheKhoiApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TheKhoiApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		943679302ECBC3F20056C6AB /* Exceptions for "TheKhoiApp" folder in "TheKhoiApp" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 076539A32EBDA77C007F85C5 /* TheKhoiApp */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		076539A62EBDA77C007F85C5 /* TheKhoiApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				943679302ECBC3F20056C6AB /* Exceptions for "TheKhoiApp" folder in "TheKhoiApp" target */,
-			);
 			path = TheKhoiApp;
 			sourceTree = "<group>";
 		};
