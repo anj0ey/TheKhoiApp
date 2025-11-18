@@ -6,19 +6,24 @@
 //
 
 import SwiftUI
+import AuthenticationServices
+import GoogleSignIn
 
 // MARK: - Main Entry Point
 struct ContentView: View {
-    @State private var isOnboardingComplete = false
+    @StateObject private var authManager = AuthManager()
     
     var body: some View {
-        if isOnboardingComplete {
+        if authManager.isOnboardingComplete {
             RootView()
+                .environmentObject(authManager)
         } else {
-            OnboardingView(isOnboardingComplete: $isOnboardingComplete)
+            OnboardingView()
+                .environmentObject(authManager)
         }
     }
 }
+
 
 // MARK: - Theme & Colors
 struct KHOIColors {
@@ -256,7 +261,7 @@ struct MasonryGrid<Content: View, T: Identifiable>: View {
 
 // MARK: - Onboarding View
 struct OnboardingView: View {
-    @Binding var isOnboardingComplete: Bool
+    @EnvironmentObject var authManager: AuthManager
     
     var body: some View {
         ZStack {
@@ -296,29 +301,27 @@ struct OnboardingView: View {
                 // Auth buttons
                 VStack(spacing: KHOITheme.spacing_md) {
                     
-                    // Apple Button
-                    Button {
-                        isOnboardingComplete = true
-                    } label: {
-                        HStack(spacing: KHOITheme.spacing_md) {
-                            Image(systemName: "apple.logo")
-                                .font(.title3)
-                            Text("Continue with Apple")
-                                .font(KHOITheme.headline)
+                    // Sign in with Apple (native button)
+                    SignInWithAppleButton(
+                        .signIn,
+                        onRequest: { request in
+                            authManager.handleAppleRequest(request)
+                        },
+                        onCompletion: { result in
+                            authManager.handleAppleCompletion(result)
                         }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, KHOITheme.spacing_lg)
-                        .background(Color.black)
-                        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                    }
+                    )
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 52)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
                     
-                    // Google Button
+                    // Sign in with Google
                     Button {
-                        isOnboardingComplete = true
+                        authManager.signInWithGoogle()
                     } label: {
                         HStack(spacing: KHOITheme.spacing_md) {
-                            Image(systemName: "globe") // You can swap for Google icon if you import it
+                            Image(systemName: "globe") // swap for real Google icon asset if you add one
                                 .font(.title3)
                             Text("Continue with Google")
                                 .font(KHOITheme.headline)
