@@ -115,16 +115,16 @@ struct InspoPost: Identifiable {
 
 extension InspoPost {
     static let samples: [InspoPost] = [
-        InspoPost(imageHeight: 280, artistName: "Jasmine Li", artistHandle: "@mua_jas", tag: "Soft glam"),
-        InspoPost(imageHeight: 320, artistName: "Maya Chen", artistHandle: "@mayabeauty", tag: "Bridal"),
-        InspoPost(imageHeight: 240, artistName: "Sofia Martinez", artistHandle: "@sofiaglam", tag: "Full beat"),
-        InspoPost(imageHeight: 300, artistName: "Aisha Williams", artistHandle: "@aisha_mua", tag: "Natural"),
-        InspoPost(imageHeight: 260, artistName: "Emma Thompson", artistHandle: "@emmaartistry", tag: "Editorial"),
-        InspoPost(imageHeight: 340, artistName: "Priya Patel", artistHandle: "@priya_beauty", tag: "Glam"),
-        InspoPost(imageHeight: 220, artistName: "Luna Rodriguez", artistHandle: "@luna_makeup", tag: "Dewy skin"),
-        InspoPost(imageHeight: 290, artistName: "Zara Kim", artistHandle: "@zara_mua", tag: "Bold lips"),
-        InspoPost(imageHeight: 310, artistName: "Chloe Davis", artistHandle: "@chloebeauty", tag: "Soft glam"),
-        InspoPost(imageHeight: 270, artistName: "Nadia Ali", artistHandle: "@nadia_artistry", tag: "Bridal"),
+        InspoPost(imageHeight: 280, artistName: "Jasmine Li", artistHandle: "@mua_jas", tag: "Makeup"),
+        InspoPost(imageHeight: 320, artistName: "Maya Chen", artistHandle: "@mayabeauty", tag: "Makeup"),
+        InspoPost(imageHeight: 240, artistName: "Sofia Martinez", artistHandle: "@sofiaglam", tag: "Nails"),
+        InspoPost(imageHeight: 300, artistName: "Aisha Williams", artistHandle: "@aisha_mua", tag: "Lashes"),
+        InspoPost(imageHeight: 260, artistName: "Emma Thompson", artistHandle: "@emmaartistry", tag: "Skin"),
+        InspoPost(imageHeight: 340, artistName: "Priya Patel", artistHandle: "@priya_beauty", tag: "Hair"),
+        InspoPost(imageHeight: 220, artistName: "Luna Rodriguez", artistHandle: "@luna_makeup", tag: "Body"),
+        InspoPost(imageHeight: 290, artistName: "Zara Kim", artistHandle: "@zara_mua", tag: "Lashes"),
+        InspoPost(imageHeight: 310, artistName: "Chloe Davis", artistHandle: "@chloebeauty", tag: "Lashes"),
+        InspoPost(imageHeight: 270, artistName: "Nadia Ali", artistHandle: "@nadia_artistry", tag: "Nails"),
     ]
 }
 
@@ -164,51 +164,81 @@ struct FilterChip: View {
     }
 }
 
+// mock posts until real posts can be built
 struct InspoCard: View {
     let post: InspoPost
     let width: CGFloat
-    let action: () -> Void
+    let isSaved: Bool
+    let saveCount: Int
+    let onSaveTap: () -> Void
     
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
-                // Image
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: width, height: post.imageHeight)
-                    .overlay(
-                        AsyncImage(url: post.imageURL) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            ZStack {
-                                Color.gray.opacity(0.1)
-                                Image(systemName: "photo")
-                                    .font(.title)
-                                    .foregroundColor(.gray.opacity(0.3))
-                            }
-                        }
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+        VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
+            // Artist info
+            HStack(spacing: 3) {
+                Text(post.artistHandle)
+                    .font(KHOITheme.callout)
+                    .fontWeight(.medium)
+                    .foregroundColor(KHOIColors.darkText)
                 
-                // Artist info
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(post.artistHandle)
-                        .font(KHOITheme.callout)
-                        .fontWeight(.medium)
-                        .foregroundColor(KHOIColors.darkText)
-                    
-                    Text(post.tag)
+                Text(post.tag)
+                    .font(KHOITheme.caption)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            .padding(.horizontal, 4)
+            
+            // Image
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: width, height: post.imageHeight)
+                .overlay(
+                    AsyncImage(url: post.imageURL) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        ZStack {
+                            Color.gray.opacity(0.1)
+                            Image(systemName: "photo")
+                                .font(.title)
+                                .foregroundColor(.gray.opacity(0.3))
+                        }
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+            
+            // Save button + count
+            HStack(spacing: KHOITheme.spacing_sm) {
+                Button(action: onSaveTap) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                            .font(.caption)
+                        Text(isSaved ? "Saved" : "Save to Collection")
+                            .font(KHOITheme.caption)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(isSaved ? KHOIColors.selectedChip.opacity(0.15) : KHOIColors.chipBackground)
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                if saveCount > 0 {
+                    Text("\(saveCount) save\(saveCount == 1 ? "" : "s")")
                         .font(KHOITheme.caption)
                         .foregroundColor(KHOIColors.mutedText)
                 }
-                .padding(.horizontal, 4)
+                
+                Spacer()
             }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
         }
-        .buttonStyle(.plain)
     }
 }
+
 
 struct MasonryGrid<Content: View, T: Identifiable>: View {
     let items: [T]
@@ -356,26 +386,58 @@ struct OnboardingView: View {
 }
 
 // MARK: - Home View Model
-@Observable
-class HomeViewModel {
-    var posts: [InspoPost] = InspoPost.samples
-    var selectedCategory: ServiceCategory = .all
+class HomeViewModel: ObservableObject {
+    @Published var posts: [InspoPost] = InspoPost.samples
+    @Published var selectedCategory: ServiceCategory = .all
     
+    // Saved state
+    @Published var savedPostIDs: Set<UUID> = []
+    @Published var saveCounts: [UUID: Int] = [:]
+    
+    // Posts shown in Discover
     var filteredPosts: [InspoPost] {
         if selectedCategory == .all {
             return posts
         }
+        // later you can filter here by category
         return posts
+    }
+    
+    // Posts in the user's Collection
+    var savedPosts: [InspoPost] {
+        posts.filter { savedPostIDs.contains($0.id) }
     }
     
     func selectCategory(_ category: ServiceCategory) {
         selectedCategory = category
     }
+    
+    // Toggle save + update count
+    func toggleSave(for post: InspoPost) {
+        if savedPostIDs.contains(post.id) {
+            savedPostIDs.remove(post.id)
+        } else {
+            savedPostIDs.insert(post.id)
+        }
+        
+        // Increment save count the first time, keep it at least 1 once saved
+        let current = saveCounts[post.id, default: 0]
+        saveCounts[post.id] = max(current + 1, 1)
+    }
+    
+    func isSaved(_ post: InspoPost) -> Bool {
+        savedPostIDs.contains(post.id)
+    }
+    
+    func saveCount(for post: InspoPost) -> Int {
+        saveCounts[post.id, default: 0]
+    }
 }
+
 
 // MARK: - Home View
 struct HomeView: View {
-    @State private var viewModel = HomeViewModel()
+    @ObservedObject var viewModel: HomeViewModel
     
     var body: some View {
         NavigationStack {
@@ -418,9 +480,15 @@ struct HomeView: View {
                         columns: 2,
                         spacing: KHOITheme.spacing_md
                     ) { post, width in
-                        InspoCard(post: post, width: width) {
-                            // Handle card tap
-                        }
+                        InspoCard(
+                            post: post,
+                            width: width,
+                            isSaved: viewModel.isSaved(post),
+                            saveCount: viewModel.saveCount(for: post),
+                            onSaveTap: {
+                                viewModel.toggleSave(for: post)
+                            }
+                        )
                     }
                 }
             }
@@ -428,19 +496,20 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Browse View
-struct BrowseView: View {
+
+// MARK: - Appointments
+struct Appointments: View {
     var body: some View {
         NavigationStack {
             ZStack {
                 KHOIColors.background
                     .ignoresSafeArea()
                 
-                Text("Browse/Explore")
+                Text("Appointments")
                     .font(KHOITheme.title2)
                     .foregroundColor(KHOIColors.mutedText)
             }
-            .navigationTitle("Explore")
+            .navigationTitle("Appointments")
         }
     }
 }
@@ -464,36 +533,68 @@ struct ChatsView: View {
 
 // MARK: - Profile View
 struct ProfileView: View {
+    @ObservedObject var viewModel: HomeViewModel
+    
     var body: some View {
         NavigationStack {
             ZStack {
                 KHOIColors.background
                     .ignoresSafeArea()
                 
-                Text("Profile & Appointments")
-                    .font(KHOITheme.title2)
-                    .foregroundColor(KHOIColors.mutedText)
+                VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
+                    Text("My Collection")
+                        .font(KHOITheme.title2)
+                        .foregroundColor(KHOIColors.darkText)
+                        .padding(.horizontal, KHOITheme.spacing_lg)
+                        .padding(.top, KHOITheme.spacing_lg)
+                    
+                    if viewModel.savedPosts.isEmpty {
+                        Text("Save looks you love from Discover to see them here.")
+                            .font(KHOITheme.body)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .padding(.horizontal, KHOITheme.spacing_lg)
+                            .padding(.top, KHOITheme.spacing_md)
+                    } else {
+                        MasonryGrid(
+                            items: viewModel.savedPosts,
+                            columns: 2,
+                            spacing: KHOITheme.spacing_md
+                        ) { post, width in
+                            InspoCard(
+                                post: post,
+                                width: width,
+                                isSaved: viewModel.isSaved(post),
+                                saveCount: viewModel.saveCount(for: post),
+                                onSaveTap: {
+                                    viewModel.toggleSave(for: post)
+                                }
+                            )
+                        }
+                    }
+                }
             }
             .navigationTitle("Profile")
         }
     }
 }
 
+
 // MARK: - Root View (Tab Bar)
 struct RootView: View {
+    @StateObject private var homeViewModel = HomeViewModel()
     @State private var selectedTab = 0
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            HomeView()
+            HomeView(viewModel: homeViewModel)
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
                 .tag(0)
             
-            BrowseView()
+            Appointments()
                 .tabItem {
-                    Label("Explore", systemImage: "square.grid.2x2.fill")
+                    Label("Appointments", systemImage: "calendar")
                 }
                 .tag(1)
             
@@ -503,7 +604,7 @@ struct RootView: View {
                 }
                 .tag(2)
             
-            ProfileView()
+            ProfileView(viewModel: homeViewModel)
                 .tabItem {
                     Label("Profile", systemImage: "person.fill")
                 }
@@ -512,6 +613,7 @@ struct RootView: View {
         .tint(KHOIColors.accentBrown)
     }
 }
+
 
 #Preview {
     ContentView()
