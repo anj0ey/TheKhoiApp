@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		94D9F1AF2ECCF7B800CF8108 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94D9F1AE2ECCF7B800CF8108 /* GoogleSignIn */; };
+		94D9F1B12ECCF7B800CF8108 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 94D9F1B02ECCF7B800CF8108 /* GoogleSignInSwift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		076539A42EBDA77C007F85C5 /* TheKhoiApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TheKhoiApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +41,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				94D9F1AF2ECCF7B800CF8108 /* GoogleSignIn in Frameworks */,
+				94D9F1B12ECCF7B800CF8108 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +85,8 @@
 			);
 			name = TheKhoiApp;
 			packageProductDependencies = (
+				94D9F1AE2ECCF7B800CF8108 /* GoogleSignIn */,
+				94D9F1B02ECCF7B800CF8108 /* GoogleSignInSwift */,
 			);
 			productName = TheKhoiApp;
 			productReference = 076539A42EBDA77C007F85C5 /* TheKhoiApp.app */;
@@ -91,7 +100,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1640;
-				LastUpgradeCheck = 1640;
+				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					076539A32EBDA77C007F85C5 = {
 						CreatedOnToolsVersion = 16.4;
@@ -107,6 +116,9 @@
 			);
 			mainGroup = 0765399B2EBDA77C007F85C5;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				94D9F1AD2ECCF7B800CF8108 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 076539A52EBDA77C007F85C5 /* Products */;
 			projectDirPath = "";
@@ -197,6 +209,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -254,6 +267,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -266,7 +280,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = E2U9MKNK75;
+				DEVELOPMENT_TEAM = XSVAFWF9R6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TheKhoiApp/Info.plist;
@@ -295,7 +309,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = E2U9MKNK75;
+				DEVELOPMENT_TEAM = XSVAFWF9R6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TheKhoiApp/Info.plist;
@@ -339,6 +353,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		94D9F1AD2ECCF7B800CF8108 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		94D9F1AE2ECCF7B800CF8108 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 94D9F1AD2ECCF7B800CF8108 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		94D9F1B02ECCF7B800CF8108 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 94D9F1AD2ECCF7B800CF8108 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0765399C2EBDA77C007F85C5 /* Project object */;
 }
