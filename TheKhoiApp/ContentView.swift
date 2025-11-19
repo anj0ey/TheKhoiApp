@@ -295,6 +295,8 @@ struct OnboardingView: View {
     
     var body: some View {
         ZStack {
+            KHOIColors.white.ignoresSafeArea()
+            
             Image("background")
                 .resizable()
                 .scaledToFit()
