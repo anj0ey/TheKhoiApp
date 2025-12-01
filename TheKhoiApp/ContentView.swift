@@ -12,10 +12,13 @@ import GoogleSignIn
 // MARK: - Main Entry Point
 struct ContentView: View {
     @StateObject private var authManager = AuthManager()
-    
+
     var body: some View {
         if authManager.isOnboardingComplete {
             RootView()
+                .environmentObject(authManager)
+        } else if authManager.needsProfileSetup {
+            ProfileSetupView()
                 .environmentObject(authManager)
         } else {
             OnboardingView()
@@ -23,6 +26,7 @@ struct ContentView: View {
         }
     }
 }
+
 
 
 // MARK: - Theme & Colors
@@ -535,21 +539,48 @@ struct ChatsView: View {
 
 // MARK: - Profile View
 struct ProfileView: View {
+    @EnvironmentObject var authManager: AuthManager
     @ObservedObject var viewModel: HomeViewModel
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
-                KHOIColors.background
-                    .ignoresSafeArea()
-                
+                KHOIColors.background.ignoresSafeArea()
+
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
+                    // Header: username + bio
+                    if let user = authManager.currentUser {
+                        VStack(spacing: 4) {
+                            Text("@\(user.username)")
+                                .font(KHOITheme.title2)
+                                .foregroundColor(KHOIColors.darkText)
+
+                            if !user.bio.isEmpty {
+                                Text(user.bio)
+                                    .font(KHOITheme.body)
+                                    .foregroundColor(KHOIColors.mutedText)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, KHOITheme.spacing_xl)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, KHOITheme.spacing_xl)
+                    } else {
+                        Text("No profile yet")
+                            .font(KHOITheme.body)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, KHOITheme.spacing_xl)
+                    }
+
+                    // Section title
                     Text("My Collection")
-                        .font(KHOITheme.title2)
+                        .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.darkText)
                         .padding(.horizontal, KHOITheme.spacing_lg)
                         .padding(.top, KHOITheme.spacing_lg)
-                    
+
+                    // Saved posts masonry grid
                     if viewModel.savedPosts.isEmpty {
                         Text("Save looks you love from Discover to see them here.")
                             .font(KHOITheme.body)
@@ -573,6 +604,8 @@ struct ProfileView: View {
                             )
                         }
                     }
+
+                    Spacer()
                 }
             }
             .navigationTitle("Profile")
@@ -583,39 +616,31 @@ struct ProfileView: View {
 
 // MARK: - Root View (Tab Bar)
 struct RootView: View {
+    @EnvironmentObject var authManager: AuthManager
     @StateObject private var homeViewModel = HomeViewModel()
     @State private var selectedTab = 0
-    
+                                
     var body: some View {
         TabView(selection: $selectedTab) {
             HomeView(viewModel: homeViewModel)
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
+                .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
-            
+                                        
             Appointments()
-                .tabItem {
-                    Label("Appointments", systemImage: "calendar")
-                }
+                .tabItem { Label("Appointments", systemImage: "square.grid.2x2.fill") }
                 .tag(1)
-            
+                                        
             ChatsView()
-                .tabItem {
-                    Label("Chats", systemImage: "message.fill")
-                }
-                .tag(2)
-            
+                 .tabItem { Label("Chats", systemImage: "message.fill") }
+                 .tag(2)
+                                        
             ProfileView(viewModel: homeViewModel)
-                .tabItem {
-                    Label("Profile", systemImage: "person.fill")
-                }
-                .tag(3)
-        }
-        .tint(KHOIColors.accentBrown)
-    }
+                 .tabItem { Label("Profile", systemImage: "person.fill") }
+                 .tag(3)
+            }
+            .tint(KHOIColors.accentBrown)
+     }
 }
-
 
 #Preview {
     ContentView()
