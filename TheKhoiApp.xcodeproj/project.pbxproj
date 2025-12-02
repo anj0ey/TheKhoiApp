@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		9476249F2EDE44AF0038CAFF /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9476249E2EDE44AF0038CAFF /* FirebaseAuth */; };
 		947624A12EDE44AF0038CAFF /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 947624A02EDE44AF0038CAFF /* FirebaseFirestore */; };
+		947624DA2EDF9CEE0038CAFF /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 947624D92EDF9CEE0038CAFF /* FirebaseStorage */; };
 		94D9F1AF2ECCF7B800CF8108 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94D9F1AE2ECCF7B800CF8108 /* GoogleSignIn */; };
 		94D9F1B12ECCF7B800CF8108 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 94D9F1B02ECCF7B800CF8108 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
@@ -46,6 +47,7 @@
 				94D9F1AF2ECCF7B800CF8108 /* GoogleSignIn in Frameworks */,
 				947624A12EDE44AF0038CAFF /* FirebaseFirestore in Frameworks */,
 				9476249F2EDE44AF0038CAFF /* FirebaseAuth in Frameworks */,
+				947624DA2EDF9CEE0038CAFF /* FirebaseStorage in Frameworks */,
 				94D9F1B12ECCF7B800CF8108 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -57,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				076539A62EBDA77C007F85C5 /* TheKhoiApp */,
+				947624D82EDF9CEE0038CAFF /* Frameworks */,
 				076539A52EBDA77C007F85C5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -67,6 +70,13 @@
 				076539A42EBDA77C007F85C5 /* TheKhoiApp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		947624D82EDF9CEE0038CAFF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -93,6 +103,7 @@
 				94D9F1B02ECCF7B800CF8108 /* GoogleSignInSwift */,
 				9476249E2EDE44AF0038CAFF /* FirebaseAuth */,
 				947624A02EDE44AF0038CAFF /* FirebaseFirestore */,
+				947624D92EDF9CEE0038CAFF /* FirebaseStorage */,
 			);
 			productName = TheKhoiApp;
 			productReference = 076539A42EBDA77C007F85C5 /* TheKhoiApp.app */;
@@ -390,6 +401,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9476249D2EDE44AF0038CAFF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		947624D92EDF9CEE0038CAFF /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9476249D2EDE44AF0038CAFF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 		94D9F1AE2ECCF7B800CF8108 /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
