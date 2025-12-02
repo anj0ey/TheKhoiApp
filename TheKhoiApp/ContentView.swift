@@ -9,6 +9,7 @@ import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
 import FirebaseFirestore
+import Combine
 
 // MARK: - Main Entry Point
 struct ContentView: View {
@@ -17,7 +18,6 @@ struct ContentView: View {
     var body: some View {
         Group {
             if authManager.isCheckingAuth {
-                // Show loading while checking auth state
                 ZStack {
                     KHOIColors.background.ignoresSafeArea()
                     ProgressView()
@@ -36,7 +36,6 @@ struct ContentView: View {
         }
     }
 }
-
 
 
 // MARK: - Theme & Colors
@@ -101,48 +100,7 @@ struct KHOITheme {
     static let cornerRadius_pill: CGFloat = 100
 }
 
-// MARK: - Models
-struct InspoPost: Identifiable {
-    let id: UUID
-    let imageHeight: CGFloat
-    let imageURL: URL?
-    let artistName: String
-    let artistHandle: String
-    let tag: String
-    
-    init(
-        id: UUID = UUID(),
-        imageHeight: CGFloat,
-        imageURL: URL? = nil,
-        artistName: String,
-        artistHandle: String,
-        tag: String
-    ) {
-        self.id = id
-        self.imageHeight = imageHeight
-        self.imageURL = imageURL
-        self.artistName = artistName
-        self.artistHandle = artistHandle
-        self.tag = tag
-    }
-}
-
-extension InspoPost {
-    static let samples: [InspoPost] = [
-        InspoPost(imageHeight: 280, artistName: "Jasmine Li", artistHandle: "@mua_jas", tag: "Makeup"),
-        InspoPost(imageHeight: 320, artistName: "Maya Chen", artistHandle: "@mayabeauty", tag: "Makeup"),
-        InspoPost(imageHeight: 240, artistName: "Sofia Martinez", artistHandle: "@sofiaglam", tag: "Nails"),
-        InspoPost(imageHeight: 300, artistName: "Aisha Williams", artistHandle: "@aisha_mua", tag: "Lashes"),
-        InspoPost(imageHeight: 260, artistName: "Emma Thompson", artistHandle: "@emmaartistry", tag: "Skin"),
-        InspoPost(imageHeight: 340, artistName: "Priya Patel", artistHandle: "@priya_beauty", tag: "Hair"),
-        InspoPost(imageHeight: 220, artistName: "Luna Rodriguez", artistHandle: "@luna_makeup", tag: "Body"),
-        InspoPost(imageHeight: 290, artistName: "Zara Kim", artistHandle: "@zara_mua", tag: "Lashes"),
-        InspoPost(imageHeight: 310, artistName: "Chloe Davis", artistHandle: "@chloebeauty", tag: "Lashes"),
-        InspoPost(imageHeight: 270, artistName: "Nadia Ali", artistHandle: "@nadia_artistry", tag: "Nails"),
-    ]
-}
-
-// MARK: - Service Category (includes Body)
+// MARK: - Service Category
 enum ServiceCategory: String, CaseIterable {
     case all = "All"
     case makeup = "Makeup"
@@ -180,69 +138,134 @@ struct FilterChip: View {
     }
 }
 
-// mock posts until real posts can be built
-struct InspoCard: View {
-    let post: InspoPost
+// MARK: - PostCard (Updated for Real Posts)
+struct PostCard: View {
+    let post: Post
     let width: CGFloat
     let isSaved: Bool
-    let saveCount: Int
     let onSaveTap: () -> Void
+    let onArtistTap: (() -> Void)?
+    
+    init(
+        post: Post,
+        width: CGFloat,
+        isSaved: Bool,
+        onSaveTap: @escaping () -> Void,
+        onArtistTap: (() -> Void)? = nil
+    ) {
+        self.post = post
+        self.width = width
+        self.isSaved = isSaved
+        self.onSaveTap = onSaveTap
+        self.onArtistTap = onArtistTap
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
-            // Artist info
-            HStack(spacing: 3) {
-                Text(post.artistHandle)
-                    .font(KHOITheme.callout)
-                    .fontWeight(.medium)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text(post.tag)
-                    .font(KHOITheme.caption)
-                    .foregroundColor(KHOIColors.mutedText)
+            // Artist info (tappable)
+            Button {
+                onArtistTap?()
+            } label: {
+                HStack(spacing: 6) {
+                    // Artist profile image
+                    if let profileURL = post.artistProfileImageURL, let url = URL(string: profileURL) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle().fill(KHOIColors.chipBackground)
+                        }
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                    }
+                    
+                    Text(post.artistHandle)
+                        .font(KHOITheme.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text(post.tag)
+                        .font(KHOITheme.caption)
+                        .foregroundColor(KHOIColors.mutedText)
+                }
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 4)
             
-            // Image
-            Rectangle()
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: width, height: post.imageHeight)
-                .overlay(
-                    AsyncImage(url: post.imageURL) { image in
+            // Post Image
+            if let url = URL(string: post.imageURL), !post.imageURL.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                            .frame(width: width, height: post.imageHeight)
+                            .overlay(ProgressView())
+                    case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        ZStack {
-                            Color.gray.opacity(0.1)
-                            Image(systemName: "photo")
-                                .font(.title)
-                                .foregroundColor(.gray.opacity(0.3))
-                        }
+                            .frame(width: width, height: post.imageHeight)
+                            .clipped()
+                    case .failure:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                            .frame(width: width, height: post.imageHeight)
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .font(.title)
+                                    .foregroundColor(KHOIColors.mutedText)
+                            )
+                    @unknown default:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                            .frame(width: width, height: post.imageHeight)
                     }
-                )
+                }
                 .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: width, height: post.imageHeight)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .font(.title)
+                            .foregroundColor(.gray.opacity(0.3))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+            }
             
-            // Save button + count
+            // Caption
+            if let caption = post.caption, !caption.isEmpty {
+                Text(caption)
+                    .font(KHOITheme.caption)
+                    .foregroundColor(KHOIColors.darkText)
+                    .lineLimit(2)
+                    .padding(.horizontal, 4)
+            }
+            
+            // Save button
             HStack(spacing: KHOITheme.spacing_sm) {
                 Button(action: onSaveTap) {
                     HStack(spacing: 6) {
                         Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                             .font(.caption)
-                        Text(isSaved ? "Saved" : "Save to Collection")
+                        Text(isSaved ? "Saved" : "Save")
                             .font(KHOITheme.caption)
                     }
+                    .foregroundColor(isSaved ? KHOIColors.accentBrown : KHOIColors.darkText)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
                         Capsule()
-                            .fill(isSaved ? KHOIColors.selectedChip.opacity(0.15) : KHOIColors.chipBackground)
+                            .fill(isSaved ? KHOIColors.accentBrown.opacity(0.15) : KHOIColors.chipBackground)
                     )
                 }
                 .buttonStyle(.plain)
                 
-                if saveCount > 0 {
-                    Text("\(saveCount) save\(saveCount == 1 ? "" : "s")")
+                if post.saveCount > 0 {
+                    Text("\(post.saveCount) save\(post.saveCount == 1 ? "" : "s")")
                         .font(KHOITheme.caption)
                         .foregroundColor(KHOIColors.mutedText)
                 }
@@ -255,7 +278,7 @@ struct InspoCard: View {
     }
 }
 
-
+// MARK: - MasonryGrid
 struct MasonryGrid<Content: View, T: Identifiable>: View {
     let items: [T]
     let columns: Int
@@ -304,7 +327,6 @@ struct MasonryGrid<Content: View, T: Identifiable>: View {
     }
 }
 
-
 // MARK: - Onboarding View
 struct OnboardingView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -331,7 +353,6 @@ struct OnboardingView: View {
             VStack(spacing: 0) {
                 Spacer()
                 
-                // Logo + Tagline
                 VStack(spacing: KHOITheme.spacing_md) {
                     Text("KHOI")
                         .font(KHOITheme.largeTitle)
@@ -346,10 +367,7 @@ struct OnboardingView: View {
                 }
                 .padding(.bottom, KHOITheme.spacing_xxl)
                 
-                // Auth buttons
                 VStack(spacing: KHOITheme.spacing_md) {
-                    
-                    // Sign in with Apple (native button)
                     SignInWithAppleButton(
                         .signIn,
                         onRequest: { request in
@@ -364,12 +382,11 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
                     
-                    // Sign in with Google
                     Button {
                         authManager.signInWithGoogle()
                     } label: {
                         HStack(spacing: KHOITheme.spacing_md) {
-                            Image(systemName: "globe") // swap for real Google icon asset if you add one
+                            Image(systemName: "globe")
                                 .font(.title3)
                             Text("Continue with Google")
                                 .font(KHOITheme.headline)
@@ -387,7 +404,6 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, KHOITheme.spacing_xl)
                 
-                // Terms text
                 Text("By pressing on 'Continue with…' you agree to our Privacy Policy and Terms and Conditions")
                     .font(KHOITheme.caption)
                     .foregroundColor(KHOIColors.mutedText)
@@ -405,49 +421,138 @@ struct OnboardingView: View {
 
 // MARK: - Home View Model
 class HomeViewModel: ObservableObject {
-    @Published var posts: [InspoPost] = InspoPost.samples
+    @Published var posts: [Post] = []
     @Published var selectedCategory: ServiceCategory = .all
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var savedPostIDs: Set<String> = []
     
-    // Saved state
-    @Published var savedPostIDs: Set<UUID> = []
-    @Published var saveCounts: [UUID: Int] = [:]
+    private let db = Firestore.firestore()
+    private var postsListener: ListenerRegistration?
+    private var cancellables = Set<AnyCancellable>()
     
-    // Posts shown in Discover - FIXED: Actually filters by category
-    var filteredPosts: [InspoPost] {
-        if selectedCategory == .all {
-            return posts
-        }
-        return posts.filter { $0.tag == selectedCategory.rawValue }
+    init() {
+        loadSavedPosts()
+        $selectedCategory
+            .sink { [weak self] category in
+                self?.fetchPosts(category: category)
+            }
+            .store(in: &cancellables)
     }
     
-    // Posts in the user's Collection
-    var savedPosts: [InspoPost] {
-        posts.filter { savedPostIDs.contains($0.id) }
+    func fetchPosts(category: ServiceCategory = .all) {
+        isLoading = true
+        errorMessage = nil
+        postsListener?.remove()
+        
+        var query: Query = db.collection("posts")
+            .order(by: "createdAt", descending: true)
+        
+        if category != .all {
+            query = query.whereField("tag", isEqualTo: category.rawValue)
+        }
+        
+        postsListener = query.limit(to: 50).addSnapshotListener { [weak self] snapshot, error in
+            guard let self = self else { return }
+            self.isLoading = false
+            
+            if let error = error {
+                self.errorMessage = error.localizedDescription
+                self.loadMockData()
+                return
+            }
+            
+            guard let documents = snapshot?.documents else {
+                self.loadMockData()
+                return
+            }
+            
+            let fetchedPosts = documents.compactMap { Post(document: $0) }
+            
+            if fetchedPosts.isEmpty {
+                self.loadMockData()
+            } else {
+                self.posts = fetchedPosts
+            }
+        }
     }
     
     func selectCategory(_ category: ServiceCategory) {
         selectedCategory = category
     }
     
-    // Toggle save + update count
-    func toggleSave(for post: InspoPost) {
-        if savedPostIDs.contains(post.id) {
-            savedPostIDs.remove(post.id)
-        } else {
-            savedPostIDs.insert(post.id)
-        }
-        
-        // Increment save count the first time, keep it at least 1 once saved
-        let current = saveCounts[post.id, default: 0]
-        saveCounts[post.id] = max(current + 1, 1)
+    var filteredPosts: [Post] { posts }
+    
+    var savedPosts: [Post] {
+        posts.filter { savedPostIDs.contains($0.id) }
     }
     
-    func isSaved(_ post: InspoPost) -> Bool {
+    func toggleSave(for post: Post) {
+        if savedPostIDs.contains(post.id) {
+            savedPostIDs.remove(post.id)
+            decrementSaveCount(postId: post.id)
+        } else {
+            savedPostIDs.insert(post.id)
+            incrementSaveCount(postId: post.id)
+        }
+        saveSavedPosts()
+    }
+    
+    func isSaved(_ post: Post) -> Bool {
         savedPostIDs.contains(post.id)
     }
     
-    func saveCount(for post: InspoPost) -> Int {
-        saveCounts[post.id, default: 0]
+    func saveCount(for post: Post) -> Int {
+        post.saveCount
+    }
+    
+    private func incrementSaveCount(postId: String) {
+        db.collection("posts").document(postId).updateData([
+            "saveCount": FieldValue.increment(Int64(1))
+        ])
+    }
+    
+    private func decrementSaveCount(postId: String) {
+        db.collection("posts").document(postId).updateData([
+            "saveCount": FieldValue.increment(Int64(-1))
+        ])
+    }
+    
+    private func saveSavedPosts() {
+        UserDefaults.standard.set(Array(savedPostIDs), forKey: "savedPostIDs")
+    }
+    
+    private func loadSavedPosts() {
+        if let array = UserDefaults.standard.array(forKey: "savedPostIDs") as? [String] {
+            savedPostIDs = Set(array)
+        }
+    }
+    
+    private func loadMockData() {
+        let mockPosts: [Post] = [
+            Post(id: "mock1", artistId: "artist1", artistName: "Jasmine Li", artistHandle: "@mua_jas", artistProfileImageURL: nil, imageURL: "", imageHeight: 280, tag: "Makeup", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock2", artistId: "artist2", artistName: "Maya Chen", artistHandle: "@mayabeauty", artistProfileImageURL: nil, imageURL: "", imageHeight: 320, tag: "Makeup", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock3", artistId: "artist3", artistName: "Sofia Martinez", artistHandle: "@sofiaglam", artistProfileImageURL: nil, imageURL: "", imageHeight: 240, tag: "Nails", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock4", artistId: "artist4", artistName: "Aisha Williams", artistHandle: "@aisha_mua", artistProfileImageURL: nil, imageURL: "", imageHeight: 300, tag: "Lashes", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock5", artistId: "artist5", artistName: "Emma Thompson", artistHandle: "@emmaartistry", artistProfileImageURL: nil, imageURL: "", imageHeight: 260, tag: "Skin", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock6", artistId: "artist6", artistName: "Priya Patel", artistHandle: "@priya_beauty", artistProfileImageURL: nil, imageURL: "", imageHeight: 340, tag: "Hair", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock7", artistId: "artist7", artistName: "Luna Rodriguez", artistHandle: "@luna_makeup", artistProfileImageURL: nil, imageURL: "", imageHeight: 220, tag: "Body", caption: nil, saveCount: 0, createdAt: Date()),
+            Post(id: "mock8", artistId: "artist8", artistName: "Zara Kim", artistHandle: "@zara_mua", artistProfileImageURL: nil, imageURL: "", imageHeight: 290, tag: "Lashes", caption: nil, saveCount: 0, createdAt: Date()),
+        ]
+        
+        if selectedCategory == .all {
+            posts = mockPosts
+        } else {
+            posts = mockPosts.filter { $0.tag == selectedCategory.rawValue }
+        }
+    }
+    
+    func stopListening() {
+        postsListener?.remove()
+    }
+    
+    deinit {
+        stopListening()
     }
 }
 
@@ -458,12 +563,13 @@ struct HomeView: View {
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var searchResults: [SearchResult] = []
+    @State private var selectedArtistId: String?
+    @State private var showArtistProfile = false
     
     var body: some View {
         NavigationStack {
             ZStack {
-                KHOIColors.background
-                    .ignoresSafeArea()
+                KHOIColors.background.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                     // Search bar
@@ -474,9 +580,7 @@ struct HomeView: View {
                         TextField("Search people, services...", text: $searchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .onSubmit {
-                                performSearch()
-                            }
+                            .onSubmit { performSearch() }
                             .onChange(of: searchText) { oldValue, newValue in
                                 if newValue.isEmpty {
                                     isSearching = false
@@ -504,16 +608,23 @@ struct HomeView: View {
                     .padding(.top, KHOITheme.spacing_sm)
                     
                     if isSearching || hasSearched {
-                        // Search results view
                         SearchResultsView(
                             isSearching: isSearching,
                             searchResults: searchResults,
-                            searchText: searchText
+                            searchText: searchText,
+                            onArtistTap: { artistId in
+                                selectedArtistId = artistId
+                                showArtistProfile = true
+                            }
                         )
                     } else {
-                        // Normal home content
                         homeContent
                     }
+                }
+            }
+            .navigationDestination(isPresented: $showArtistProfile) {
+                if let artistId = selectedArtistId {
+                    ArtistProfileDestination(artistId: artistId)
                 }
             }
         }
@@ -521,7 +632,6 @@ struct HomeView: View {
     
     private var homeContent: some View {
         VStack(spacing: 0) {
-            // Filter chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: KHOITheme.spacing_sm) {
                     ForEach(ServiceCategory.allCases, id: \.self) { category in
@@ -549,19 +659,19 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 12)
             
-            // Masonry grid
             MasonryGrid(
                 items: viewModel.filteredPosts,
                 columns: 2,
                 spacing: KHOITheme.spacing_md
             ) { post, width in
-                InspoCard(
+                PostCard(
                     post: post,
                     width: width,
                     isSaved: viewModel.isSaved(post),
-                    saveCount: viewModel.saveCount(for: post),
-                    onSaveTap: {
-                        viewModel.toggleSave(for: post)
+                    onSaveTap: { viewModel.toggleSave(for: post) },
+                    onArtistTap: {
+                        selectedArtistId = post.artistId
+                        showArtistProfile = true
                     }
                 )
             }
@@ -578,7 +688,6 @@ struct HomeView: View {
         
         let searchLower = query.lowercased()
         
-        // First, add matching service categories (local search)
         let matchingCategories = ServiceCategory.allCases.filter { category in
             category != .all && category.rawValue.lowercased().contains(searchLower)
         }
@@ -594,48 +703,85 @@ struct HomeView: View {
         }
         searchResults.append(contentsOf: categoryResults)
         
-        // Then search Firestore for users
         let db = Firestore.firestore()
         
-        db.collection("users")
+        // Search artists
+        db.collection("artists")
             .whereField("usernameLower", isGreaterThanOrEqualTo: searchLower)
             .whereField("usernameLower", isLessThanOrEqualTo: searchLower + "\u{f8ff}")
             .limit(to: 20)
             .getDocuments { snapshot, error in
-                if let error = error {
-                    print("Search error: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
-                        isSearching = false
+                if let documents = snapshot?.documents {
+                    let artists = documents.compactMap { doc -> SearchResult? in
+                        let data = doc.data()
+                        guard let username = data["username"] as? String,
+                              let fullName = data["fullName"] as? String else { return nil }
+                        
+                        return SearchResult(
+                            id: doc.documentID,
+                            type: .artist,
+                            title: fullName,
+                            subtitle: "@\(username)",
+                            imageURL: data["profileImageURL"] as? String
+                        )
                     }
-                    return
+                    searchResults.append(contentsOf: artists)
                 }
-                
-                guard let documents = snapshot?.documents else {
-                    DispatchQueue.main.async {
-                        isSearching = false
-                    }
-                    return
+                isSearching = false
+            }
+    }
+}
+
+// MARK: - Artist Profile Destination
+struct ArtistProfileDestination: View {
+    let artistId: String
+    @State private var artist: Artist?
+    @State private var isLoading = true
+    
+    private let db = Firestore.firestore()
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                ZStack {
+                    KHOIColors.background.ignoresSafeArea()
+                    ProgressView()
                 }
-                
-                let users = documents.compactMap { doc -> SearchResult? in
-                    let data = doc.data()
-                    guard let username = data["username"] as? String,
-                          let fullName = data["fullName"] as? String else { return nil }
-                    
-                    return SearchResult(
-                        id: doc.documentID,
-                        type: .user,
-                        title: fullName,
-                        subtitle: "@\(username)",
-                        imageURL: data["profileImageURL"] as? String
-                    )
-                }
-                
-                DispatchQueue.main.async {
-                    searchResults.append(contentsOf: users)
-                    isSearching = false
+            } else if let artist = artist {
+                ArtistProfileView(artist: artist)
+            } else {
+                ZStack {
+                    KHOIColors.background.ignoresSafeArea()
+                    Text("Artist not found")
+                        .foregroundColor(KHOIColors.mutedText)
                 }
             }
+        }
+        .onAppear { fetchArtist() }
+    }
+    
+    private func fetchArtist() {
+        db.collection("artists").document(artistId).getDocument { snapshot, error in
+            isLoading = false
+            if let snapshot = snapshot {
+                artist = Artist(document: snapshot)
+            }
+        }
+    }
+}
+
+// MARK: - Search Models
+struct SearchResult: Identifiable {
+    let id: String
+    let type: ResultType
+    let title: String
+    let subtitle: String
+    let imageURL: String?
+    
+    enum ResultType {
+        case user
+        case service
+        case artist
     }
 }
 
@@ -644,6 +790,7 @@ struct SearchResultsView: View {
     let isSearching: Bool
     let searchResults: [SearchResult]
     let searchText: String
+    var onArtistTap: ((String) -> Void)?
     
     var body: some View {
         if isSearching {
@@ -666,12 +813,18 @@ struct SearchResultsView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(searchResults) { result in
-                        SearchResultRow(result: result)
-                            .padding(.horizontal)
-                            .padding(.vertical, KHOITheme.spacing_sm)
+                        Button {
+                            if result.type == .artist {
+                                onArtistTap?(result.id)
+                            }
+                        } label: {
+                            SearchResultRow(result: result)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal)
+                        .padding(.vertical, KHOITheme.spacing_sm)
                         
-                        Divider()
-                            .padding(.horizontal)
+                        Divider().padding(.horizontal)
                     }
                 }
                 .padding(.top, KHOITheme.spacing_md)
@@ -680,76 +833,60 @@ struct SearchResultsView: View {
     }
 }
 
-// MARK: - Search Models
-struct SearchResult: Identifiable {
-    let id: String
-    let type: ResultType
-    let title: String
-    let subtitle: String
-    let imageURL: String?
-    
-    enum ResultType {
-        case user
-        case service
-    }
-}
-
 // MARK: - Search Result Row
 struct SearchResultRow: View {
     let result: SearchResult
-    @EnvironmentObject var authManager: AuthManager
-    @StateObject private var chatService = ChatService()
-    @State private var navigateToChat = false
-    @State private var conversationId: String?
     
-    var body: some View {
-        Button {
-            if result.type == .user {
-                startChat()
-            }
-        } label: {
-            HStack(spacing: KHOITheme.spacing_md) {
-                // ... existing content
-            }
-        }
-        .navigationDestination(isPresented: $navigateToChat) {
-            if let convId = conversationId,
-               let userId = authManager.firebaseUID {
-                // Navigate to chat
-                Text("Chat with \(result.title)")
-            }
+    var iconName: String {
+        switch result.type {
+        case .user: return "person.fill"
+        case .service: return "sparkles"
+        case .artist: return "paintbrush.fill"
         }
     }
     
-    private func startChat() {
-        guard let currentUser = authManager.currentUser,
-              let currentUserId = authManager.firebaseUID else { return }
-        
-        chatService.getOrCreateConversation(
-            currentUser: (currentUserId, currentUser.username, currentUser.fullName),
-            otherUser: (result.id, result.subtitle.replacingOccurrences(of: "@", with: ""), result.title),
-            tag: nil
-        ) { result in
-            switch result {
-            case .success(let convId):
-                conversationId = convId
-                navigateToChat = true
-            case .failure(let error):
-                print("Failed to create chat: \(error)")
+    var body: some View {
+        HStack(spacing: KHOITheme.spacing_md) {
+            if let imageURL = result.imageURL, let url = URL(string: imageURL) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle().fill(KHOIColors.chipBackground)
+                        .overlay(Image(systemName: iconName).foregroundColor(KHOIColors.mutedText))
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(KHOIColors.chipBackground)
+                    .frame(width: 50, height: 50)
+                    .overlay(Image(systemName: iconName).foregroundColor(KHOIColors.mutedText))
             }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.title)
+                    .font(KHOITheme.headline)
+                    .foregroundColor(KHOIColors.darkText)
+                
+                Text(result.subtitle)
+                    .font(KHOITheme.callout)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundColor(KHOIColors.mutedText)
         }
     }
 }
-
 
 // MARK: - Appointments
 struct Appointments: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                KHOIColors.background
-                    .ignoresSafeArea()
-                
+                KHOIColors.background.ignoresSafeArea()
                 Text("APPOINTMENTS")
                     .font(KHOITheme.headline)
                     .foregroundColor(KHOIColors.mutedText)
@@ -772,7 +909,6 @@ struct ProfileView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
-                        // Header: username + bio
                         if let user = authManager.currentUser {
                             VStack(spacing: 4) {
                                 Text("@\(user.username)")
@@ -797,14 +933,12 @@ struct ProfileView: View {
                                 .padding(.top, KHOITheme.spacing_xl)
                         }
 
-                        // Section title
                         Text("My Collection")
                             .font(KHOITheme.headline)
                             .foregroundColor(KHOIColors.darkText)
                             .padding(.horizontal, KHOITheme.spacing_lg)
                             .padding(.top, KHOITheme.spacing_lg)
 
-                        // Saved posts masonry grid
                         if viewModel.savedPosts.isEmpty {
                             Text("Save looks you love from Discover to see them here.")
                                 .font(KHOITheme.body)
@@ -817,31 +951,23 @@ struct ProfileView: View {
                                 columns: 2,
                                 spacing: KHOITheme.spacing_md
                             ) { post, width in
-                                InspoCard(
+                                PostCard(
                                     post: post,
                                     width: width,
                                     isSaved: viewModel.isSaved(post),
-                                    saveCount: viewModel.saveCount(for: post),
-                                    onSaveTap: {
-                                        viewModel.toggleSave(for: post)
-                                    }
+                                    onSaveTap: { viewModel.toggleSave(for: post) }
                                 )
                             }
                         }
 
-                        // Log Out Button
-                        Button(action: {
-                            authManager.logOut()
-                        }) {
+                        Button(action: { authManager.logOut() }) {
                             Text("Log Out")
                                 .foregroundColor(.red)
                                 .font(KHOITheme.body)
                                 .padding()
                                 .frame(maxWidth: .infinity)
                                 .background(KHOIColors.cardBackground)
-                                .clipShape(
-                                    RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md)
-                                )
+                                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
                                 .padding(.horizontal)
                         }
                         .padding(.top, KHOITheme.spacing_xl)
@@ -852,7 +978,6 @@ struct ProfileView: View {
         }
     }
 }
-
 
 // MARK: - Root View (Tab Bar)
 struct RootView: View {
