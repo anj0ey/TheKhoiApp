@@ -63,10 +63,9 @@ struct ChatsView: View {
                     // Header
                     HStack {
                         Text("CHATS")
-                            .font(KHOITheme.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(KHOIColors.darkText)
-                            .tracking(1)
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .tracking(2)
                         
                         Spacer()
                         
