@@ -18,6 +18,7 @@ struct ProfileSetupView: View {
     @State private var confirmPassword: String = ""
 
     @State private var errorMessage: String?
+    @State private var isSubmitting: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -65,14 +66,22 @@ struct ProfileSetupView: View {
                         Button {
                             submit()
                         } label: {
-                            Text("Finish setup")
-                                .font(KHOITheme.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, KHOITheme.spacing_lg)
-                                .background(KHOIColors.accentBrown)
-                                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+                            HStack {
+                                if isSubmitting {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                }
+                                Text(isSubmitting ? "Saving..." : "Finish setup")
+                                    .font(KHOITheme.headline)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, KHOITheme.spacing_lg)
+                            .background(isSubmitting ? KHOIColors.accentBrown.opacity(0.6) : KHOIColors.accentBrown)
+                            .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
                         }
+                        .disabled(isSubmitting)
                         .padding(.top, KHOITheme.spacing_md)
 
                         Spacer(minLength: 40)
@@ -84,33 +93,52 @@ struct ProfileSetupView: View {
             .onAppear {
                 fullName = authManager.authenticatedName ?? ""
                 email = authManager.authenticatedEmail ?? ""
+                print("📱 ProfileSetup appeared")
+                print("   Name:", fullName)
+                print("   Email:", email)
+                print("   Firebase UID:", authManager.firebaseUID ?? "nil")
             }
         }
     }
 
     private func submit() {
         errorMessage = nil
+        isSubmitting = true
 
         guard !username.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "Please choose a username."
+            isSubmitting = false
             return
         }
 
         guard password.count >= 6 else {
             errorMessage = "Password must be at least 6 characters."
+            isSubmitting = false
             return
         }
 
         guard password == confirmPassword else {
-            errorMessage = "Passwords don’t match."
+            errorMessage = "Passwords don't match."
+            isSubmitting = false
             return
         }
 
+        print("📤 Submitting profile setup...")
+        
         authManager.finishProfileSetup(
             username: username.trimmingCharacters(in: .whitespaces),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
             password: password
-        )
+        ) { success, error in
+            isSubmitting = false
+            
+            if success {
+                print("✅ Profile setup completed successfully")
+            } else {
+                print("❌ Profile setup failed:", error ?? "Unknown error")
+                errorMessage = error ?? "Something went wrong. Please try again."
+            }
+        }
     }
 
     private func labeledField(_ title: String, text: Binding<String>, disabled: Bool = false) -> some View {

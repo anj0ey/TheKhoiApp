@@ -11,18 +11,27 @@ import GoogleSignIn
 
 // MARK: - Main Entry Point
 struct ContentView: View {
-    @StateObject private var authManager = AuthManager()
+    @ObservedObject var authManager: AuthManager
 
     var body: some View {
-        if authManager.isOnboardingComplete {
-            RootView()
-                .environmentObject(authManager)
-        } else if authManager.needsProfileSetup {
-            ProfileSetupView()
-                .environmentObject(authManager)
-        } else {
-            OnboardingView()
-                .environmentObject(authManager)
+        Group {
+            if authManager.isCheckingAuth {
+                // Show loading while checking auth state
+                ZStack {
+                    KHOIColors.background.ignoresSafeArea()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: KHOIColors.accentBrown))
+                }
+            } else if authManager.isOnboardingComplete {
+                RootView()
+                    .environmentObject(authManager)
+            } else if authManager.needsProfileSetup {
+                ProfileSetupView()
+                    .environmentObject(authManager)
+            } else {
+                OnboardingView()
+                    .environmentObject(authManager)
+            }
         }
     }
 }
@@ -610,6 +619,20 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
         }
+        Button(action: {
+            authManager.logOut()
+        }) {
+            Text("Log Out")
+                .foregroundColor(.red)
+                .font(KHOITheme.body)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(KHOIColors.cardBackground)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md)
+                )
+                .padding(.horizontal)
+        }
     }
 }
 
@@ -627,7 +650,7 @@ struct RootView: View {
                 .tag(0)
                                         
             Appointments()
-                .tabItem { Label("Appointments", systemImage: "square.grid.2x2.fill") }
+                .tabItem { Label("Appointments", systemImage: "calendar") }
                 .tag(1)
                                         
             ChatsView()
@@ -643,5 +666,5 @@ struct RootView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(authManager: AuthManager())
 }
