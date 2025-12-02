@@ -752,9 +752,10 @@ struct ChatsView: View {
                 KHOIColors.background
                     .ignoresSafeArea()
                 
-                Text("Chats")
-                    .font(KHOITheme.title2)
+                Text("CHATS")
+                    .font(KHOITheme.headline)
                     .foregroundColor(KHOIColors.mutedText)
+                    .tracking(2)
             }
             .navigationTitle("Messages")
         }
