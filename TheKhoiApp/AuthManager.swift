@@ -23,6 +23,7 @@ struct UserProfile: Codable, Identifiable {
     var email: String
     var username: String
     var bio: String
+    var isBusiness: Bool?
     
     init(
         id: UUID = UUID(),
@@ -30,12 +31,14 @@ struct UserProfile: Codable, Identifiable {
         email: String,
         username: String,
         bio: String
+        isBusiness: Bool = false
     ) {
         self.id = id
         self.fullName = fullName
         self.email = email
         self.username = username
         self.bio = bio
+        self.isBusiness = isBusiness
     }
 }
 
@@ -60,6 +63,27 @@ final class AuthManager: ObservableObject {
     
     // Where we store the profile in UserDefaults
     private let userKey = "currentUserProfile"
+    
+    func updateBusinessStatus(isBusiness: Bool) {
+            guard let uid = firebaseUID else { return }
+            
+            // 1. Optimistic Update (Update local UI immediately)
+            if var user = currentUser {
+                user.isBusiness = isBusiness
+                currentUser = user
+            }
+            
+            // 2. Update Firestore
+            Firestore.firestore().collection("users").document(uid).updateData([
+                "isBusiness": isBusiness
+            ]) { error in
+                if let error = error {
+                    print("❌ Error updating business status: \(error.localizedDescription)")
+                } else {
+                    print("✅ Business status synced to Firestore: \(isBusiness)")
+                }
+            }
+        }
     
     init() {
         // Check if Firebase already has an active session

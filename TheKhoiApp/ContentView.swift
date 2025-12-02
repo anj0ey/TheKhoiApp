@@ -742,28 +742,20 @@ struct SearchResultRow: View {
 }
 
 
-// MARK: - Appointments
-struct Appointments: View {
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                KHOIColors.background
-                    .ignoresSafeArea()
-                
-                Text("APPOINTMENTS")
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.mutedText)
-                    .tracking(2)
-            }
-            .navigationTitle("Appointments")
-        }
-    }
-}
-
 // MARK: - Profile View
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     @ObservedObject var viewModel: HomeViewModel
+    
+    // Binding to AuthManager for Business Status
+        private var isBusinessAccount: Binding<Bool> {
+            Binding(
+                get: { authManager.currentUser?.isBusiness ?? false },
+                set: { newValue in
+                    authManager.updateBusinessStatus(isBusiness: newValue)
+                }
+            )
+        }
 
     var body: some View {
         NavigationStack {
