@@ -750,9 +750,10 @@ struct Appointments: View {
                 KHOIColors.background
                     .ignoresSafeArea()
                 
-                Text("Appointments")
-                    .font(KHOITheme.title2)
+                Text("APPOINTMENTS")
+                    .font(KHOITheme.headline)
                     .foregroundColor(KHOIColors.mutedText)
+                    .tracking(2)
             }
             .navigationTitle("Appointments")
         }
