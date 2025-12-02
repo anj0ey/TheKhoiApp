@@ -12,6 +12,7 @@ import GoogleSignIn
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseCore
 import CryptoKit
 
 // MARK: - User Profile Model
@@ -184,8 +185,10 @@ final class AuthManager: ObservableObject {
         
         let data: [String: Any] = [
             "fullName": user.fullName,
+            "fullNameLower": user.fullName.lowercased(),
             "email": user.email,
             "username": user.username,
+            "usernameLower": user.username.lowercased(),
             "bio": user.bio,
             "createdAt": FieldValue.serverTimestamp(),
             "updatedAt": FieldValue.serverTimestamp()
@@ -232,6 +235,11 @@ final class AuthManager: ObservableObject {
         switch result {
         case .success(let authorization):
             if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                // Set loading state
+                DispatchQueue.main.async {
+                    self.isCheckingAuth = true
+                }
+                
                 // Apple gives email & name only the first time
                 let email = appleIDCredential.email
                 
@@ -245,11 +253,17 @@ final class AuthManager: ObservableObject {
                 guard let identityTokenData = appleIDCredential.identityToken,
                       let identityToken = String(data: identityTokenData, encoding: .utf8) else {
                     print("❌ Unable to fetch identity token")
+                    DispatchQueue.main.async {
+                        self.isCheckingAuth = false
+                    }
                     return
                 }
                 
                 guard let nonce = currentNonce else {
                     print("❌ Invalid state: A login callback was received, but no login request was sent.")
+                    DispatchQueue.main.async {
+                        self.isCheckingAuth = false
+                    }
                     return
                 }
                 
@@ -266,16 +280,24 @@ final class AuthManager: ObservableObject {
                     
                     if let error = error {
                         print("❌ Firebase Apple auth error:", error.localizedDescription)
+                        DispatchQueue.main.async {
+                            self.isCheckingAuth = false
+                        }
                         return
                     }
                     
                     print("✅ Firebase Apple auth success")
                     guard let uid = authResult?.user.uid else {
                         print("❌ No Firebase UID returned")
+                        DispatchQueue.main.async {
+                            self.isCheckingAuth = false
+                        }
                         return
                     }
                     
-                    self.firebaseUID = uid
+                    DispatchQueue.main.async {
+                        self.firebaseUID = uid
+                    }
                     print("firebaseUID:", uid)
                     
                     // Check Firestore for existing profile
@@ -343,9 +365,16 @@ final class AuthManager: ObservableObject {
             self.isCheckingAuth = true
         }
         
-        let config = GIDConfiguration(
-            clientID: "722927676352-08iup6qfo82fh3558shedjalddnb9a48.apps.googleusercontent.com"
-        )
+        // Get client ID from Firebase config
+        guard let clientID = FirebaseApp.app()?.options.clientID else {
+            print("❌ No Firebase client ID found")
+            DispatchQueue.main.async {
+                self.isCheckingAuth = false
+            }
+            return
+        }
+        
+        let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
         
         GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { [weak self] result, error in
@@ -371,11 +400,13 @@ final class AuthManager: ObservableObject {
             let accessToken = user.accessToken.tokenString
             
             // Save display info for your profile flow
-            self.authenticatedEmail = user.profile?.email ?? self.authenticatedEmail
-            self.authenticatedName = user.profile?.name ?? self.authenticatedName
+            DispatchQueue.main.async {
+                self.authenticatedEmail = user.profile?.email ?? self.authenticatedEmail
+                self.authenticatedName = user.profile?.name ?? self.authenticatedName
+            }
             
-            print("📧 Google email:", self.authenticatedEmail ?? "nil")
-            print("👤 Google name:", self.authenticatedName ?? "nil")
+            print("📧 Google email:", user.profile?.email ?? "nil")
+            print("👤 Google name:", user.profile?.name ?? "nil")
             
             // Create Firebase credential
             let credential = GoogleAuthProvider.credential(

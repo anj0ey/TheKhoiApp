@@ -8,6 +8,7 @@
 import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
+import FirebaseFirestore
 
 // MARK: - Main Entry Point
 struct ContentView: View {
@@ -141,6 +142,7 @@ extension InspoPost {
     ]
 }
 
+// MARK: - Service Category (includes Body)
 enum ServiceCategory: String, CaseIterable {
     case all = "All"
     case makeup = "Makeup"
@@ -148,6 +150,7 @@ enum ServiceCategory: String, CaseIterable {
     case nails = "Nails"
     case lashes = "Lashes"
     case skin = "Skin"
+    case body = "Body"
 }
 
 // MARK: - Components
@@ -385,7 +388,7 @@ struct OnboardingView: View {
                 .padding(.horizontal, KHOITheme.spacing_xl)
                 
                 // Terms text
-                Text("By pressing on “Continue with…” you agree to our Privacy Policy and Terms and Conditions")
+                Text("By pressing on 'Continue with…' you agree to our Privacy Policy and Terms and Conditions")
                     .font(KHOITheme.caption)
                     .foregroundColor(KHOIColors.mutedText)
                     .multilineTextAlignment(.center)
@@ -409,13 +412,12 @@ class HomeViewModel: ObservableObject {
     @Published var savedPostIDs: Set<UUID> = []
     @Published var saveCounts: [UUID: Int] = [:]
     
-    // Posts shown in Discover
+    // Posts shown in Discover - FIXED: Actually filters by category
     var filteredPosts: [InspoPost] {
         if selectedCategory == .all {
             return posts
         }
-        // later you can filter here by category
-        return posts
+        return posts.filter { $0.tag == selectedCategory.rawValue }
     }
     
     // Posts in the user's Collection
@@ -449,10 +451,13 @@ class HomeViewModel: ObservableObject {
     }
 }
 
-
 // MARK: - Home View
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
+    @State private var searchText = ""
+    @State private var isSearching = false
+    @State private var hasSearched = false
+    @State private var searchResults: [SearchResult] = []
     
     var body: some View {
         NavigationStack {
@@ -461,52 +466,262 @@ struct HomeView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Filter chips
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: KHOITheme.spacing_sm) {
-                            ForEach(ServiceCategory.allCases, id: \.self) { category in
-                                FilterChip(
-                                    title: category.rawValue,
-                                    isSelected: viewModel.selectedCategory == category
-                                ) {
-                                    viewModel.selectCategory(category)
+                    // Search bar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(KHOIColors.mutedText)
+                        
+                        TextField("Search people, services...", text: $searchText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onSubmit {
+                                performSearch()
+                            }
+                            .onChange(of: searchText) { oldValue, newValue in
+                                if newValue.isEmpty {
+                                    isSearching = false
+                                    hasSearched = false
+                                    searchResults = []
                                 }
                             }
-                        }
-                        .padding(.horizontal, KHOITheme.spacing_lg)
-                        .padding(.vertical, KHOITheme.spacing_md)
-                    }
-                    
-                    HStack(spacing: KHOITheme.spacing_sm) {
-                        Text("DISCOVER")
-                            .font(KHOITheme.headline)
-                            .foregroundColor(KHOIColors.mutedText)
-                            .tracking(2)
                         
-                        Image(systemName: "globe")
-                            .foregroundColor(KHOIColors.mutedText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 12)
-                    
-                    // Masonry grid
-                    MasonryGrid(
-                        items: viewModel.filteredPosts,
-                        columns: 2,
-                        spacing: KHOITheme.spacing_md
-                    ) { post, width in
-                        InspoCard(
-                            post: post,
-                            width: width,
-                            isSaved: viewModel.isSaved(post),
-                            saveCount: viewModel.saveCount(for: post),
-                            onSaveTap: {
-                                viewModel.toggleSave(for: post)
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                                isSearching = false
+                                hasSearched = false
+                                searchResults = []
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(KHOIColors.mutedText)
                             }
+                        }
+                    }
+                    .padding()
+                    .background(KHOIColors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
+                    .padding(.horizontal)
+                    .padding(.top, KHOITheme.spacing_sm)
+                    
+                    if isSearching || hasSearched {
+                        // Search results view
+                        SearchResultsView(
+                            isSearching: isSearching,
+                            searchResults: searchResults,
+                            searchText: searchText
                         )
+                    } else {
+                        // Normal home content
+                        homeContent
                     }
                 }
             }
+        }
+    }
+    
+    private var homeContent: some View {
+        VStack(spacing: 0) {
+            // Filter chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: KHOITheme.spacing_sm) {
+                    ForEach(ServiceCategory.allCases, id: \.self) { category in
+                        FilterChip(
+                            title: category.rawValue,
+                            isSelected: viewModel.selectedCategory == category
+                        ) {
+                            viewModel.selectCategory(category)
+                        }
+                    }
+                }
+                .padding(.horizontal, KHOITheme.spacing_lg)
+                .padding(.vertical, KHOITheme.spacing_md)
+            }
+            
+            HStack(spacing: KHOITheme.spacing_sm) {
+                Text("DISCOVER")
+                    .font(KHOITheme.headline)
+                    .foregroundColor(KHOIColors.mutedText)
+                    .tracking(2)
+                
+                Image(systemName: "globe")
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 12)
+            
+            // Masonry grid
+            MasonryGrid(
+                items: viewModel.filteredPosts,
+                columns: 2,
+                spacing: KHOITheme.spacing_md
+            ) { post, width in
+                InspoCard(
+                    post: post,
+                    width: width,
+                    isSaved: viewModel.isSaved(post),
+                    saveCount: viewModel.saveCount(for: post),
+                    onSaveTap: {
+                        viewModel.toggleSave(for: post)
+                    }
+                )
+            }
+        }
+    }
+    
+    private func performSearch() {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        
+        isSearching = true
+        hasSearched = true
+        searchResults = []
+        
+        let searchLower = query.lowercased()
+        
+        // First, add matching service categories (local search)
+        let matchingCategories = ServiceCategory.allCases.filter { category in
+            category != .all && category.rawValue.lowercased().contains(searchLower)
+        }
+        
+        let categoryResults = matchingCategories.map { category in
+            SearchResult(
+                id: "category-\(category.rawValue)",
+                type: .service,
+                title: category.rawValue,
+                subtitle: "Service category",
+                imageURL: nil
+            )
+        }
+        searchResults.append(contentsOf: categoryResults)
+        
+        // Then search Firestore for users
+        let db = Firestore.firestore()
+        
+        db.collection("users")
+            .whereField("usernameLower", isGreaterThanOrEqualTo: searchLower)
+            .whereField("usernameLower", isLessThanOrEqualTo: searchLower + "\u{f8ff}")
+            .limit(to: 20)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Search error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        isSearching = false
+                    }
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    DispatchQueue.main.async {
+                        isSearching = false
+                    }
+                    return
+                }
+                
+                let users = documents.compactMap { doc -> SearchResult? in
+                    let data = doc.data()
+                    guard let username = data["username"] as? String,
+                          let fullName = data["fullName"] as? String else { return nil }
+                    
+                    return SearchResult(
+                        id: doc.documentID,
+                        type: .user,
+                        title: fullName,
+                        subtitle: "@\(username)",
+                        imageURL: data["profileImageURL"] as? String
+                    )
+                }
+                
+                DispatchQueue.main.async {
+                    searchResults.append(contentsOf: users)
+                    isSearching = false
+                }
+            }
+    }
+}
+
+// MARK: - Search Results View
+struct SearchResultsView: View {
+    let isSearching: Bool
+    let searchResults: [SearchResult]
+    let searchText: String
+    
+    var body: some View {
+        if isSearching {
+            Spacer()
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: KHOIColors.accentBrown))
+            Spacer()
+        } else if searchResults.isEmpty && !searchText.isEmpty {
+            Spacer()
+            VStack(spacing: KHOITheme.spacing_md) {
+                Image(systemName: "magnifyingglass")
+                    .font(.largeTitle)
+                    .foregroundColor(KHOIColors.mutedText)
+                Text("No results found")
+                    .font(KHOITheme.body)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            Spacer()
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(searchResults) { result in
+                        SearchResultRow(result: result)
+                            .padding(.horizontal)
+                            .padding(.vertical, KHOITheme.spacing_sm)
+                        
+                        Divider()
+                            .padding(.horizontal)
+                    }
+                }
+                .padding(.top, KHOITheme.spacing_md)
+            }
+        }
+    }
+}
+
+// MARK: - Search Models
+struct SearchResult: Identifiable {
+    let id: String
+    let type: ResultType
+    let title: String
+    let subtitle: String
+    let imageURL: String?
+    
+    enum ResultType {
+        case user
+        case service
+    }
+}
+
+// MARK: - Search Result Row
+struct SearchResultRow: View {
+    let result: SearchResult
+    
+    var body: some View {
+        HStack(spacing: KHOITheme.spacing_md) {
+            Circle()
+                .fill(KHOIColors.chipBackground)
+                .frame(width: 50, height: 50)
+                .overlay(
+                    Image(systemName: result.type == .user ? "person.fill" : "sparkles")
+                        .foregroundColor(KHOIColors.mutedText)
+                )
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.title)
+                    .font(KHOITheme.headline)
+                    .foregroundColor(KHOIColors.darkText)
+                
+                Text(result.subtitle)
+                    .font(KHOITheme.callout)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundColor(KHOIColors.mutedText)
         }
     }
 }
@@ -556,82 +771,85 @@ struct ProfileView: View {
             ZStack {
                 KHOIColors.background.ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
-                    // Header: username + bio
-                    if let user = authManager.currentUser {
-                        VStack(spacing: 4) {
-                            Text("@\(user.username)")
-                                .font(KHOITheme.title2)
-                                .foregroundColor(KHOIColors.darkText)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
+                        // Header: username + bio
+                        if let user = authManager.currentUser {
+                            VStack(spacing: 4) {
+                                Text("@\(user.username)")
+                                    .font(KHOITheme.title2)
+                                    .foregroundColor(KHOIColors.darkText)
 
-                            if !user.bio.isEmpty {
-                                Text(user.bio)
-                                    .font(KHOITheme.body)
-                                    .foregroundColor(KHOIColors.mutedText)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, KHOITheme.spacing_xl)
+                                if !user.bio.isEmpty {
+                                    Text(user.bio)
+                                        .font(KHOITheme.body)
+                                        .foregroundColor(KHOIColors.mutedText)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, KHOITheme.spacing_xl)
+                                }
                             }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, KHOITheme.spacing_xl)
-                    } else {
-                        Text("No profile yet")
-                            .font(KHOITheme.body)
-                            .foregroundColor(KHOIColors.mutedText)
                             .frame(maxWidth: .infinity)
                             .padding(.top, KHOITheme.spacing_xl)
-                    }
-
-                    // Section title
-                    Text("My Collection")
-                        .font(KHOITheme.headline)
-                        .foregroundColor(KHOIColors.darkText)
-                        .padding(.horizontal, KHOITheme.spacing_lg)
-                        .padding(.top, KHOITheme.spacing_lg)
-
-                    // Saved posts masonry grid
-                    if viewModel.savedPosts.isEmpty {
-                        Text("Save looks you love from Discover to see them here.")
-                            .font(KHOITheme.body)
-                            .foregroundColor(KHOIColors.mutedText)
-                            .padding(.horizontal, KHOITheme.spacing_lg)
-                            .padding(.top, KHOITheme.spacing_md)
-                    } else {
-                        MasonryGrid(
-                            items: viewModel.savedPosts,
-                            columns: 2,
-                            spacing: KHOITheme.spacing_md
-                        ) { post, width in
-                            InspoCard(
-                                post: post,
-                                width: width,
-                                isSaved: viewModel.isSaved(post),
-                                saveCount: viewModel.saveCount(for: post),
-                                onSaveTap: {
-                                    viewModel.toggleSave(for: post)
-                                }
-                            )
+                        } else {
+                            Text("No profile yet")
+                                .font(KHOITheme.body)
+                                .foregroundColor(KHOIColors.mutedText)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, KHOITheme.spacing_xl)
                         }
-                    }
 
-                    Spacer()
+                        // Section title
+                        Text("My Collection")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.darkText)
+                            .padding(.horizontal, KHOITheme.spacing_lg)
+                            .padding(.top, KHOITheme.spacing_lg)
+
+                        // Saved posts masonry grid
+                        if viewModel.savedPosts.isEmpty {
+                            Text("Save looks you love from Discover to see them here.")
+                                .font(KHOITheme.body)
+                                .foregroundColor(KHOIColors.mutedText)
+                                .padding(.horizontal, KHOITheme.spacing_lg)
+                                .padding(.top, KHOITheme.spacing_md)
+                        } else {
+                            MasonryGrid(
+                                items: viewModel.savedPosts,
+                                columns: 2,
+                                spacing: KHOITheme.spacing_md
+                            ) { post, width in
+                                InspoCard(
+                                    post: post,
+                                    width: width,
+                                    isSaved: viewModel.isSaved(post),
+                                    saveCount: viewModel.saveCount(for: post),
+                                    onSaveTap: {
+                                        viewModel.toggleSave(for: post)
+                                    }
+                                )
+                            }
+                        }
+
+                        // Log Out Button
+                        Button(action: {
+                            authManager.logOut()
+                        }) {
+                            Text("Log Out")
+                                .foregroundColor(.red)
+                                .font(KHOITheme.body)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(KHOIColors.cardBackground)
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md)
+                                )
+                                .padding(.horizontal)
+                        }
+                        .padding(.top, KHOITheme.spacing_xl)
+                    }
                 }
             }
             .navigationTitle("Profile")
-        }
-        Button(action: {
-            authManager.logOut()
-        }) {
-            Text("Log Out")
-                .foregroundColor(.red)
-                .font(KHOITheme.body)
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(KHOIColors.cardBackground)
-                .clipShape(
-                    RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md)
-                )
-                .padding(.horizontal)
         }
     }
 }
@@ -654,15 +872,15 @@ struct RootView: View {
                 .tag(1)
                                         
             ChatsView()
-                 .tabItem { Label("Chats", systemImage: "message.fill") }
-                 .tag(2)
+                .tabItem { Label("Chats", systemImage: "message.fill") }
+                .tag(2)
                                         
             ProfileView(viewModel: homeViewModel)
-                 .tabItem { Label("Profile", systemImage: "person.fill") }
-                 .tag(3)
-            }
-            .tint(KHOIColors.accentBrown)
-     }
+                .tabItem { Label("Profile", systemImage: "person.fill") }
+                .tag(3)
+        }
+        .tint(KHOIColors.accentBrown)
+    }
 }
 
 #Preview {
