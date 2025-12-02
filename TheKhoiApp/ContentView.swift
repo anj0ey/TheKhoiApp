@@ -697,31 +697,46 @@ struct SearchResult: Identifiable {
 // MARK: - Search Result Row
 struct SearchResultRow: View {
     let result: SearchResult
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var chatService = ChatService()
+    @State private var navigateToChat = false
+    @State private var conversationId: String?
     
     var body: some View {
-        HStack(spacing: KHOITheme.spacing_md) {
-            Circle()
-                .fill(KHOIColors.chipBackground)
-                .frame(width: 50, height: 50)
-                .overlay(
-                    Image(systemName: result.type == .user ? "person.fill" : "sparkles")
-                        .foregroundColor(KHOIColors.mutedText)
-                )
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(result.title)
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text(result.subtitle)
-                    .font(KHOITheme.callout)
-                    .foregroundColor(KHOIColors.mutedText)
+        Button {
+            if result.type == .user {
+                startChat()
             }
-            
-            Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(KHOIColors.mutedText)
+        } label: {
+            HStack(spacing: KHOITheme.spacing_md) {
+                // ... existing content
+            }
+        }
+        .navigationDestination(isPresented: $navigateToChat) {
+            if let convId = conversationId,
+               let userId = authManager.firebaseUID {
+                // Navigate to chat
+                Text("Chat with \(result.title)")
+            }
+        }
+    }
+    
+    private func startChat() {
+        guard let currentUser = authManager.currentUser,
+              let currentUserId = authManager.firebaseUID else { return }
+        
+        chatService.getOrCreateConversation(
+            currentUser: (currentUserId, currentUser.username, currentUser.fullName),
+            otherUser: (result.id, result.subtitle.replacingOccurrences(of: "@", with: ""), result.title),
+            tag: nil
+        ) { result in
+            switch result {
+            case .success(let convId):
+                conversationId = convId
+                navigateToChat = true
+            case .failure(let error):
+                print("Failed to create chat: \(error)")
+            }
         }
     }
 }
@@ -740,24 +755,6 @@ struct Appointments: View {
                     .foregroundColor(KHOIColors.mutedText)
             }
             .navigationTitle("Appointments")
-        }
-    }
-}
-
-// MARK: - Chats View
-struct ChatsView: View {
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                KHOIColors.background
-                    .ignoresSafeArea()
-                
-                Text("CHATS")
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.mutedText)
-                    .tracking(2)
-            }
-            .navigationTitle("Messages")
         }
     }
 }
