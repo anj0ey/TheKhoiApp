@@ -51,59 +51,11 @@ struct KHOIColors {
     static let divider = Color(hex: "E8E3DD")
     static let chipBackground = Color(hex: "EDE8E3")
     static let selectedChip = accentBrown
+    
+    // NEW: Aliases for new profile views
+    static let accent = accentBrown
+    static let danger = Color.red
 }
-
-// MARK: - Theme & Colors
-struct KHOIColors {
-    static let background = Color(hex: "F5F1ED")
-    static let white = Color(hex: "FFFFFF")
-    static let cream = Color(hex: "F9F7F4")
-    static let softBrown = Color(hex: "A89080")
-    static let accentBrown = Color(hex: "8B7355")
-    static let darkText = Color(hex: "2C2420")
-    static let mutedText = Color(hex: "8A827C")
-    static let cardBackground = Color.white
-    static let divider = Color(hex: "E8E3DD")
-    static let chipBackground = Color(hex: "EDE8E3")
-    static let selectedChip = accentBrown
-    
-    // NEW: Aliases for new profile views
-    static let accent = accentBrown
-    static let danger = Color.red
-}
-
-struct KHOITheme {
-    static let largeTitle = Font.custom("Switzer-Regular", size: 96)
-    static let title = Font.custom("Switzer-Regular", size: 28)
-    static let title2 = Font.custom("Switzer-Regular", size: 24)
-    static let headline = Font.custom("Switzer-Regular", size: 18)
-    static let body = Font.custom("Switzer-Regular", size: 16)
-    static let callout = Font.custom("Switzer-Regular", size: 14)
-    static let caption = Font.custom("Switzer-Regular", size: 12)
-    static let caption2 = Font.custom("Switzer-Regular", size: 10)
-    
-    // NEW: Additional fonts for profile views
-    static let heading2 = Font.custom("Switzer-Regular", size: 22)
-    static let heading3 = Font.custom("Switzer-Regular", size: 20)
-    static let bodyBold = Font.custom("Switzer-Semibold", size: 16)
-    static let captionUppercase = Font.custom("Switzer-Regular", size: 11)
-
-    static let spacing_xs: CGFloat = 4
-    static let spacing_sm: CGFloat = 8
-    static let spacing_md: CGFloat = 12
-    static let spacing_lg: CGFloat = 16
-    static let spacing_xl: CGFloat = 24
-    static let spacing_xxl: CGFloat = 32
-    
-    static let cornerRadius_sm: CGFloat = 8
-    static let cornerRadius_md: CGFloat = 12
-    static let cornerRadius_lg: CGFloat = 16
-    static let cornerRadius_pill: CGFloat = 100
-    
-    // NEW: Alias for consistency
-    static let radius_lg: CGFloat = 16
-}
-
 
 extension Color {
     init(hex: String) {
@@ -138,6 +90,12 @@ struct KHOITheme {
     static let callout = Font.custom("Switzer-Regular", size: 14)
     static let caption = Font.custom("Switzer-Regular", size: 12)
     static let caption2 = Font.custom("Switzer-Regular", size: 10)
+    
+    // NEW: Additional fonts for profile views
+    static let heading2 = Font.custom("Switzer-Regular", size: 22)
+    static let heading3 = Font.custom("Switzer-Regular", size: 20)
+    static let bodyBold = Font.custom("Switzer-Semibold", size: 16)
+    static let captionUppercase = Font.custom("Switzer-Regular", size: 11)
 
     static let spacing_xs: CGFloat = 4
     static let spacing_sm: CGFloat = 8
@@ -150,6 +108,9 @@ struct KHOITheme {
     static let cornerRadius_md: CGFloat = 12
     static let cornerRadius_lg: CGFloat = 16
     static let cornerRadius_pill: CGFloat = 100
+    
+    // NEW: Alias for consistency
+    static let radius_lg: CGFloat = 16
 }
 
 // MARK: - Service Category

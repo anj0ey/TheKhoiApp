@@ -215,6 +215,33 @@ class FeedService: ObservableObject {
         postsListener?.remove()
     }
     
+    /// Fetch posts for a specific user (e.g. for Profile View)
+    func fetchPosts(forUserId userId: String) {
+        isLoading = true
+        errorMessage = nil
+        
+        db.collection("posts")
+            .whereField("artistId", isEqualTo: userId)
+            .order(by: "createdAt", descending: true)
+            .getDocuments { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.isLoading = false
+                
+                if let error = error {
+                    self.errorMessage = error.localizedDescription
+                    print("Error fetching user posts: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    self.posts = []
+                    return
+                }
+                
+                self.posts = documents.compactMap { Post(document: $0) }
+            }
+    }
+    
     deinit {
         stopListening()
     }

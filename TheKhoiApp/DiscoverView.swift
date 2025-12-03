@@ -114,7 +114,8 @@ struct DiscoverView: View {
                         ]
 
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                            ForEach(feedService.posts) { post in
+                            // Loop through the NEW filteredPosts
+                            ForEach(filteredPosts) { post in
                                 discoverTile(post: post)
                             }
                         }
@@ -133,15 +134,22 @@ struct DiscoverView: View {
 
     // MARK: - Derived Posts
 
-    private var filteredPosts: [Int] {
-        // For now this just returns mock posts.
-        // Later you can:
-        // - filter by category
-        // - filter by search text
-        // - switch datasets based on `mode`.
-        mockPosts
+    private var filteredPosts: [Post] {
+        // 1. Start with the real posts from Firebase
+        let posts = feedService.posts
+        
+        // 2. Filter by Search Text (if user typed anything)
+        if searchText.isEmpty {
+            return posts
+        } else {
+            return posts.filter { post in
+                // Search in Caption OR Artist Name
+                let captionMatch = post.caption?.localizedCaseInsensitiveContains(searchText) ?? false
+                let artistMatch = post.artistName.localizedCaseInsensitiveContains(searchText)
+                return captionMatch || artistMatch
+            }
+        }
     }
-
     // MARK: - Subviews
 
     private func modePill(title: String,
