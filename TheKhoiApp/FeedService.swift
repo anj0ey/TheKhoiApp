@@ -8,6 +8,7 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseStorage
+import UIKit
 
 class FeedService: ObservableObject {
     @Published var posts: [Post] = []
@@ -288,6 +289,42 @@ extension FeedService {
             } else {
                 completion(.success(()))
             }
+        }
+    }
+    
+    // 1. Upload Image to Firebase Storage
+    func uploadImage(image: UIImage, path: String, completion: @escaping (Result<String, Error>) -> Void) {
+        // Compression: 0.5 is a good balance of quality vs speed
+        guard let imageData = image.jpegData(compressionQuality: 0.5) else {
+            completion(.failure(NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image"])))
+            return
+        }
+        
+        let ref = Storage.storage().reference().child(path)
+        
+        ref.putData(imageData, metadata: nil) { metadata, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            ref.downloadURL { url, error in
+                if let url = url {
+                    completion(.success(url.absoluteString))
+                } else {
+                    completion(.failure(error ?? NSError(domain: "URLError", code: -1, userInfo: nil)))
+                }
+            }
+        }
+    }
+
+    // 2. Upload Post Data to Firestore
+    func uploadPost(_ post: Post, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            let _ = try db.collection("posts").addDocument(from: post)
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
         }
     }
 }
