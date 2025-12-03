@@ -95,19 +95,35 @@ class FeedService: ObservableObject {
     
     /// Fetch artist by ID
     func fetchArtist(artistId: String, completion: @escaping (Artist?) -> Void) {
+        print("🔍 Fetching artist with ID: \(artistId)")
+        
         db.collection("artists").document(artistId).getDocument { snapshot, error in
             if let error = error {
-                print("Error fetching artist: \(error.localizedDescription)")
+                print("❌ Error fetching artist: \(error.localizedDescription)")
                 completion(nil)
                 return
             }
             
             guard let snapshot = snapshot else {
+                print("❌ No snapshot returned")
                 completion(nil)
                 return
             }
             
-            completion(Artist(document: snapshot))
+            if !snapshot.exists {
+                print("❌ Document does not exist for ID: \(artistId)")
+                completion(nil)
+                return
+            }
+            
+            print("✅ Document exists, parsing artist...")
+            let artist = Artist(document: snapshot)
+            if artist != nil {
+                print("✅ Artist parsed successfully: \(artist!.fullName)")
+            } else {
+                print("❌ Failed to parse artist from document")
+            }
+            completion(artist)
         }
     }
     
