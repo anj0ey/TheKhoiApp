@@ -30,7 +30,7 @@ struct UserProfile: Codable, Identifiable {
         fullName: String,
         email: String,
         username: String,
-        bio: String
+        bio: String,
         isBusiness: Bool = false
     ) {
         self.id = id
