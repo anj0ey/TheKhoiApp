@@ -54,12 +54,23 @@ final class AuthManager: ObservableObject {
     // Finished user profile
     @Published var currentUser: UserProfile?
     
+    @Published var isBusinessMode: Bool = UserDefaults.standard.bool(forKey: "isBusinessMode") {
+        didSet {
+            UserDefaults.standard.set(isBusinessMode, forKey: "isBusinessMode")
+        }
+    }
+    
     //Firebase userID
     private var db = Firestore.firestore()
     @Published var firebaseUID: String?
     
     // Where we store the profile in UserDefaults
     private let userKey = "currentUserProfile"
+    
+    func toggleUserMode() {
+            isBusinessMode.toggle()
+            print("🔄 User switched to \(isBusinessMode ? "Business" : "Customer") mode")
+        }
     
     init() {
         // Check if Firebase already has an active session
@@ -444,6 +455,51 @@ final class AuthManager: ObservableObject {
             }
         }
     }
+    
+    // MARK: - Business Profile Creation
+        
+        // PASTE THE FUNCTION HERE 👇
+        func upgradeToBusinessProfile(businessName: String, category: String, city: String, completion: @escaping (Bool) -> Void) {
+            guard let uid = firebaseUID, let user = currentUser else {
+                completion(false)
+                return
+            }
+            
+            // Ensure db is available (defined at top of class)
+            let db = Firestore.firestore()
+            
+            // 1. Create the Artist Data Object
+            let newArtistData: [String: Any] = [
+                "id": uid,                          // ID matches User ID
+                "ownerId": uid,                     // Link to Auth User
+                "fullName": businessName,           // Business Name
+                "username": user.username,
+                "email": user.email,
+                "city": city,
+                "services": [category],             // e.g. ["Nails"]
+                "claimed": true,                    // Owned by user
+                "createdAt": Timestamp(date: Date()),
+                "rating": 5.0,
+                "reviewCount": 0,
+                "bio": "",
+                "profileImageURL": "",
+                "coverImageURL": ""
+            ]
+            
+            // 2. Save to "artists" collection
+            db.collection("artists").document(uid).setData(newArtistData) { error in
+                if let error = error {
+                    print("Error creating business profile: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    // 3. Update Local State
+                    DispatchQueue.main.async {
+                        self.isBusinessMode = true
+                    }
+                    completion(true)
+                }
+            }
+        }
     
     func logOut() {
         // 1. Sign out of Firebase

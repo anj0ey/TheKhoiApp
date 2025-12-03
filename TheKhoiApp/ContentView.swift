@@ -991,7 +991,7 @@ struct RootView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
                                         
-            Appointments()
+            AppointmentsView()
                 .tabItem { Label("Appointments", systemImage: "calendar") }
                 .tag(1)
                                         
@@ -999,7 +999,7 @@ struct RootView: View {
                 .tabItem { Label("Chats", systemImage: "message.fill") }
                 .tag(2)
                                         
-            ProfileView(viewModel: homeViewModel)
+            UserProfileView(viewModel: homeViewModel)
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(3)
         }
