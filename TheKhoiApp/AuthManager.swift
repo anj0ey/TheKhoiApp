@@ -1,9 +1,10 @@
 //
-//  AuthManager.swift
+//  AuthManager.swift 
 //  TheKhoiApp
 //
-//  Created by iya student on 11/18/25.
+//  Updated to support new profile views
 //
+
 import Foundation
 import SwiftUI
 import Combine
@@ -15,7 +16,7 @@ import FirebaseFirestore
 import FirebaseCore
 import CryptoKit
 
-// MARK: - User Profile Model
+// MARK: - User Profile Model (UPDATED)
 
 struct UserProfile: Codable, Identifiable {
     let id: UUID
@@ -24,18 +25,29 @@ struct UserProfile: Codable, Identifiable {
     var username: String
     var bio: String
     
+    // NEW FIELDS for enhanced profile
+    var location: String?          // "City, State"
+    var profileImageURL: String?   // Profile picture URL
+    var coverImageURL: String?     // Banner/cover image URL
+    
     init(
         id: UUID = UUID(),
         fullName: String,
         email: String,
         username: String,
-        bio: String
+        bio: String,
+        location: String? = nil,
+        profileImageURL: String? = nil,
+        coverImageURL: String? = nil
     ) {
         self.id = id
         self.fullName = fullName
         self.email = email
         self.username = username
         self.bio = bio
+        self.location = location
+        self.profileImageURL = profileImageURL
+        self.coverImageURL = coverImageURL
     }
 }
 
@@ -45,7 +57,7 @@ final class AuthManager: ObservableObject {
     // Overall flow
     @Published var isOnboardingComplete: Bool = false
     @Published var needsProfileSetup: Bool = false
-    @Published var isCheckingAuth: Bool = true // NEW: Loading state
+    @Published var isCheckingAuth: Bool = true
     
     // From Apple / Google providers
     @Published var authenticatedEmail: String?
@@ -118,7 +130,8 @@ final class AuthManager: ObservableObject {
         }
     }
     
-    // NEW: Check Firestore for existing profile
+    // MARK: - Check Firestore for existing profile (UPDATED)
+    
     private func checkExistingProfile(uid: String) {
         print("🔍 Checking Firestore for profile with UID:", uid)
         
@@ -148,14 +161,17 @@ final class AuthManager: ObservableObject {
                 return
             }
             
-            // Profile exists! Load it locally
+            // Profile exists! Load it locally (with new fields)
             print("✅ Existing profile found in Firestore")
             print("   Username:", username)
             let user = UserProfile(
                 fullName: fullName,
                 email: email,
                 username: username,
-                bio: bio
+                bio: bio,
+                location: data["location"] as? String,
+                profileImageURL: data["profileImageURL"] as? String,
+                coverImageURL: data["coverImageURL"] as? String
             )
             DispatchQueue.main.async {
                 self.saveUser(user)
@@ -164,7 +180,15 @@ final class AuthManager: ObservableObject {
         }
     }
     
-    func finishProfileSetup(username: String, bio: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+    // MARK: - Finish Profile Setup (UPDATED)
+    
+    func finishProfileSetup(
+        username: String,
+        bio: String,
+        location: String = "",
+        password: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
         print("📝 Starting profile setup for:", username)
         
         guard let uid = firebaseUID else {
@@ -180,7 +204,8 @@ final class AuthManager: ObservableObject {
             fullName: authenticatedName ?? "",
             email: authenticatedEmail ?? "",
             username: username,
-            bio: bio
+            bio: bio,
+            location: location.isEmpty ? nil : location
         )
         
         let data: [String: Any] = [
@@ -190,6 +215,9 @@ final class AuthManager: ObservableObject {
             "username": user.username,
             "usernameLower": user.username.lowercased(),
             "bio": user.bio,
+            "location": user.location ?? "",
+            "profileImageURL": user.profileImageURL ?? "",
+            "coverImageURL": user.coverImageURL ?? "",
             "createdAt": FieldValue.serverTimestamp(),
             "updatedAt": FieldValue.serverTimestamp()
         ]
@@ -215,6 +243,67 @@ final class AuthManager: ObservableObject {
             }
         }
     }
+    
+    // MARK: - Update Profile (NEW METHOD for EditProfileView)
+    
+    func updateProfile(
+        fullName: String? = nil,
+        username: String? = nil,
+        bio: String? = nil,
+        location: String? = nil,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        guard let uid = firebaseUID,
+              var user = currentUser else {
+            completion(false, "No user logged in")
+            return
+        }
+        
+        // Update local user object
+        if let fullName = fullName { user.fullName = fullName }
+        if let username = username { user.username = username }
+        if let bio = bio { user.bio = bio }
+        if let location = location { user.location = location }
+        
+        // Prepare Firestore update
+        var updateData: [String: Any] = [
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+        
+        if let fullName = fullName {
+            updateData["fullName"] = fullName
+            updateData["fullNameLower"] = fullName.lowercased()
+        }
+        if let username = username {
+            updateData["username"] = username
+            updateData["usernameLower"] = username.lowercased()
+        }
+        if let bio = bio {
+            updateData["bio"] = bio
+        }
+        if let location = location {
+            updateData["location"] = location
+        }
+        
+        // Update Firestore
+        db.collection("users").document(uid).updateData(updateData) { [weak self] error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Failed to update profile:", error.localizedDescription)
+                completion(false, error.localizedDescription)
+                return
+            }
+            
+            print("✅ Profile updated successfully")
+            
+            // Save locally
+            DispatchQueue.main.async {
+                self.saveUser(user)
+                completion(true, nil)
+            }
+        }
+    }
 
     
     // MARK: - Sign in with Apple
@@ -235,23 +324,27 @@ final class AuthManager: ObservableObject {
         switch result {
         case .success(let authorization):
             if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                // Set loading state
                 DispatchQueue.main.async {
                     self.isCheckingAuth = true
                 }
                 
-                // Apple gives email & name only the first time
-                let email = appleIDCredential.email
+                // Extract user info
+                if let fullName = appleIDCredential.fullName {
+                    let firstName = fullName.givenName ?? ""
+                    let lastName = fullName.familyName ?? ""
+                    DispatchQueue.main.async {
+                        self.authenticatedName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
+                    }
+                }
                 
-                let formatter = PersonNameComponentsFormatter()
-                let fullName = appleIDCredential.fullName.flatMap { formatter.string(from: $0) }
+                if let email = appleIDCredential.email {
+                    DispatchQueue.main.async {
+                        self.authenticatedEmail = email
+                    }
+                }
                 
-                authenticatedEmail = email ?? authenticatedEmail
-                authenticatedName = fullName ?? authenticatedName
-                
-                // Get the identity token
-                guard let identityTokenData = appleIDCredential.identityToken,
-                      let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+                guard let identityToken = appleIDCredential.identityToken,
+                      let identityTokenString = String(data: identityToken, encoding: .utf8) else {
                     print("❌ Unable to fetch identity token")
                     DispatchQueue.main.async {
                         self.isCheckingAuth = false
@@ -269,7 +362,7 @@ final class AuthManager: ObservableObject {
                 
                 // Create Firebase credential
                 let credential = OAuthProvider.appleCredential(
-                    withIDToken: identityToken,
+                    withIDToken: identityTokenString,
                     rawNonce: nonce,
                     fullName: appleIDCredential.fullName
                 )
