@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 // MARK: - Artist Service Model
 struct ArtistService: Identifiable, Codable {

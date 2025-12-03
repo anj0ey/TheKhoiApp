@@ -61,37 +61,36 @@ struct EditProfileView: View {
 
                     // Form fields card
                     VStack(spacing: KHOITheme.spacing_md) {
-                        SettingsFieldSection(
-                            title: "Display name",
-                            content: TextField("Display name", text: $displayName)
+                        
+                        // 1. Display Name
+                        SettingsFieldSection(title: "Display name") {
+                            TextField("Display name", text: $displayName)
                                 .textFieldStyle(.plain)
                                 .font(KHOITheme.body)
-                        )
+                        }
 
-                        SettingsFieldSection(
-                            title: "Username",
-                            content: TextField("Username", text: $username)
+                        // 2. Username
+                        SettingsFieldSection(title: "Username") {
+                            TextField("Username", text: $username)
+                                .textFieldStyle(.plain)
+                                .font(KHOITheme.body)
                                 .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
+                        }
+
+                        // 3. Bio
+                        SettingsFieldSection(title: "Bio") {
+                            TextField("Bio", text: $bio)
                                 .textFieldStyle(.plain)
                                 .font(KHOITheme.body)
-                        )
+                        }
 
-                        SettingsFieldSection(
-                            title: "Bio",
-                            content: TextEditor(text: $bio)
-                                .font(KHOITheme.body)
-                                .frame(minHeight: 90, alignment: .topLeading)
-                        )
-
-                        SettingsFieldSection(
-                            title: "Location",
-                            content: TextField("City, State", text: $location)
+                        // 4. Location
+                        SettingsFieldSection(title: "Location") {
+                            TextField("Location", text: $location)
                                 .textFieldStyle(.plain)
                                 .font(KHOITheme.body)
-                        )
-                    }
-                    .padding(.horizontal, KHOITheme.spacing_md)
+                        }
+                    }                    .padding(.horizontal, KHOITheme.spacing_md)
 
                     Spacer(minLength: 40)
                 }
@@ -114,7 +113,11 @@ struct EditProfileView: View {
         guard let user = authManager.currentUser else { return }
         displayName = user.fullName
         username = user.username
-        bio = user.bio ?? ""
+        
+        // 1. Bio is not optional in your model, so remove '?? ""'
+        bio = user.bio
+        
+        // 2. Location is now optional (String?), so keep '?? ""' to handle nil
         location = user.location ?? ""
     }
 
@@ -144,7 +147,13 @@ struct EditProfileView: View {
 
 private struct SettingsFieldSection<Content: View>: View {
     let title: String
-    @ViewBuilder var content: Content
+    let content: Content
+
+    // 👇 THIS INIT IS THE KEY FIX
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {

@@ -17,26 +17,26 @@ struct CreatePostView: View {
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var feedService = FeedService()
     @State private var isUploading = false
-
+    
     // Image picker
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var selectedImage: UIImage? = nil
-
+    
     // Form values
     @State private var caption: String = ""
     @State private var selectedCategory: String? = nil
     @State private var taggedProvider: String = ""
-
+    
     private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin"]
-
+    
     var body: some View {
         ZStack {
             KHOIColors.background
                 .ignoresSafeArea()
-
+            
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-
+                    
                     // MARK: - Header
                     HStack {
                         Button(action: { dismiss() }) {
@@ -44,46 +44,41 @@ struct CreatePostView: View {
                                 .font(KHOITheme.body)
                                 .foregroundColor(KHOIColors.mutedText)
                         }
-
+                        
                         Spacer()
-
+                        
                         Text("New post")
                             .font(KHOITheme.heading3)
                             .foregroundColor(KHOIColors.darkText)
-
+                        
                         Spacer()
-
+                        
                         Button(action: sharePost) {
-                            // 👇 THIS IS THE "CHECK"
                             if isUploading {
-                                // State A: We are busy uploading
                                 ProgressView()
-                                    .tint(KHOIColors.accent) // Optional: match your theme color
                             } else {
-                                // State B: We are ready to share (The original text)
-                                Text("Share")
-                                    .font(KHOITheme.bodyBold)
-                                    .foregroundColor(canShare ? KHOIColors.accent : KHOIColors.mutedText)
+                                Text("Share").font(KHOITheme.bodyBold)
+                                    .foregroundColor(canShare ? KHOIColors.accentBrown : Color.gray)
                             }
                         }
                         .disabled(!canShare || isUploading) // Disable button if empty OR if busy
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     .padding(.top, KHOITheme.spacing_md)
-
+                    
                     // MARK: - Image picker card
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
                         Text("Photo")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
-
+                        
                         PhotosPicker(selection: $selectedItem, matching: .images) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                                     .fill(KHOIColors.cardBackground)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 230)
-
+                                
                                 if let image = selectedImage {
                                     Image(uiImage: image)
                                         .resizable()
@@ -106,23 +101,23 @@ struct CreatePostView: View {
                         }
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
-
+                    
                     // MARK: - Caption
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Caption")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
-
+                        
                         ZStack(alignment: .topLeading) {
                             RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                                 .fill(KHOIColors.cardBackground)
-
+                            
                             TextEditor(text: $caption)
                                 .font(KHOITheme.body)
                                 .padding(.horizontal, KHOITheme.spacing_md)
                                 .padding(.vertical, KHOITheme.spacing_sm)
                                 .frame(minHeight: 100, alignment: .topLeading)
-
+                            
                             if caption.isEmpty {
                                 Text("Write a caption…")
                                     .font(KHOITheme.body)
@@ -134,39 +129,39 @@ struct CreatePostView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
-
+                    
                     // MARK: - Tag provider
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Tag provider")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
-
+                        
                         RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                             .fill(KHOIColors.cardBackground)
                             .overlay(
                                 HStack {
                                     Image(systemName: "magnifyingglass")
                                         .foregroundColor(KHOIColors.mutedText)
-
+                                    
                                     TextField("Search provider", text: $taggedProvider)
                                         .font(KHOITheme.body)
                                         .autocorrectionDisabled()
-
+                                    
                                     Spacer()
                                 }
-                                .padding(.horizontal, KHOITheme.spacing_md)
-                                .padding(.vertical, KHOITheme.spacing_sm)
+                                    .padding(.horizontal, KHOITheme.spacing_md)
+                                    .padding(.vertical, KHOITheme.spacing_sm)
                             )
                             .frame(height: 48)
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
-
+                    
                     // MARK: - Category chips
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Service category")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
-
+                        
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: KHOITheme.spacing_sm) {
                                 ForEach(categories, id: \.self) { category in
@@ -199,7 +194,7 @@ struct CreatePostView: View {
                         }
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
-
+                    
                     Spacer(minLength: 40)
                 }
             }
@@ -214,36 +209,35 @@ struct CreatePostView: View {
             }
         }
     }
-
+    
     // MARK: - Derived state
-
+    
     private var canShare: Bool {
         selectedImage != nil && !caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-
+    
     // MARK: - Actions
-
+    
     private func sharePost() {
         guard let image = selectedImage,
               let user = authManager.currentUser,
               let uid = authManager.firebaseUID else { return }
         
         isUploading = true
-        
-        // Create a unique path for the image
         let path = "post_images/\(UUID().uuidString).jpg"
         
-        // A. Upload Image
+        // 1. Upload Image
         feedService.uploadImage(image: image, path: path) { result in
             switch result {
             case .success(let url):
-                // B. Create Post Object
+                
+                // 2. Create Post (FIXED: Added UUID for id)
                 let newPost = Post(
-                    id: nil,
+                    id: UUID().uuidString,
                     artistId: uid,
                     artistName: user.fullName,
                     artistHandle: "@\(user.username)",
-                    artistProfileImageURL: nil, // Add user profile pic here later
+                    artistProfileImageURL: nil,
                     imageURL: url,
                     imageHeight: 350,
                     tag: selectedCategory ?? "General",
@@ -252,15 +246,20 @@ struct CreatePostView: View {
                     createdAt: Date()
                 )
                 
-                // C. Save to Database
-                feedService.uploadPost(newPost) { _ in
+                // 3. Upload Post (FIXED: Handling Result<String, Error>)
+                feedService.uploadPost(newPost) { result in
                     isUploading = false
-                    dismiss() // Close the screen
+                    switch result {
+                    case .success:
+                        dismiss()
+                    case .failure(let error):
+                        print("Error: \(error.localizedDescription)")
+                    }
                 }
                 
             case .failure(let error):
-                print("Error uploading: \(error.localizedDescription)")
                 isUploading = false
+                print("Image upload failed: \(error)")
             }
         }
     }}

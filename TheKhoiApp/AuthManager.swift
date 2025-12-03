@@ -4,6 +4,7 @@
 //
 //  Created by iya student on 11/18/25.
 //
+
 import Foundation
 import SwiftUI
 import Combine
@@ -18,24 +19,27 @@ import CryptoKit
 // MARK: - User Profile Model
 
 struct UserProfile: Codable, Identifiable {
-    let id: UUID
+    let id: String
     var fullName: String
     var email: String
     var username: String
     var bio: String
+    var location: String? // 👈 ADDED THIS
     
     init(
-        id: UUID = UUID(),
+        id: String,
         fullName: String,
         email: String,
         username: String,
-        bio: String
+        bio: String,
+        location: String? = nil // 👈 ADDED THIS
     ) {
         self.id = id
         self.fullName = fullName
         self.email = email
         self.username = username
         self.bio = bio
+        self.location = location
     }
 }
 
@@ -131,46 +135,51 @@ final class AuthManager: ObservableObject {
     
     // NEW: Check Firestore for existing profile
     private func checkExistingProfile(uid: String) {
-        print("🔍 Checking Firestore for profile with UID:", uid)
+        print("🔍 Checking for existing profile for UID: \(uid)")
         
-        db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
+        let docRef = db.collection("users").document(uid)
+        
+        docRef.getDocument { [weak self] document, error in
             guard let self = self else { return }
             
+            // 1. Handle Errors (Network issues, etc.)
             if let error = error {
-                print("❌ Error fetching user profile:", error.localizedDescription)
-                DispatchQueue.main.async {
-                    self.needsProfileSetup = true
-                    self.isCheckingAuth = false
-                }
+                print("❌ Error fetching profile: \(error.localizedDescription)")
+                // Don't force profile setup on error; just stop loading or show alert
+                self.isCheckingAuth = false
                 return
             }
             
-            guard let data = snapshot?.data(),
-                  let fullName = data["fullName"] as? String,
-                  let email = data["email"] as? String,
-                  let username = data["username"] as? String,
-                  let bio = data["bio"] as? String else {
-                // No profile found in Firestore
-                print("📝 No existing profile in Firestore → going to ProfileSetup")
-                DispatchQueue.main.async {
-                    self.needsProfileSetup = true
+            // 2. Check if Document Exists
+            if let document = document, document.exists {
+                print("✅ Found existing user profile")
+                
+                // Decode the user data
+                do {
+                    // Make sure your UserProfile struct matches the fields in Firestore!
+                    // If fields are missing/renamed, this try? might fail.
+                    let profile = try document.data(as: UserProfile.self)
+                    
+                    DispatchQueue.main.async {
+                        self.currentUser = profile
+                        self.isOnboardingComplete = true
+                        self.needsProfileSetup = false // CRITICAL: Mark as setup complete
+                        self.isCheckingAuth = false
+                    }
+                } catch {
+                    print("❌ Error decoding user profile: \(error)")
+                    // If decoding fails, we technically have a profile but it's corrupt.
+                    // You might want to let them fix it or contact support.
                     self.isCheckingAuth = false
                 }
-                return
-            }
-            
-            // Profile exists! Load it locally
-            print("✅ Existing profile found in Firestore")
-            print("   Username:", username)
-            let user = UserProfile(
-                fullName: fullName,
-                email: email,
-                username: username,
-                bio: bio
-            )
-            DispatchQueue.main.async {
-                self.saveUser(user)
-                self.completeOnboarding()
+            } else {
+                // 3. Document DOES NOT Exist -> Send to Setup
+                print("⚠️ No profile found for this UID. Redirecting to Profile Setup.")
+                DispatchQueue.main.async {
+                    self.needsProfileSetup = true // CRITICAL: This triggers the screen switch
+                    self.isOnboardingComplete = false
+                    self.isCheckingAuth = false
+                }
             }
         }
     }
@@ -188,6 +197,7 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.set(password, forKey: "demoPassword")
         
         let user = UserProfile(
+            id: uid,
             fullName: authenticatedName ?? "",
             email: authenticatedEmail ?? "",
             username: username,
@@ -195,6 +205,7 @@ final class AuthManager: ObservableObject {
         )
         
         let data: [String: Any] = [
+            "id": uid,
             "fullName": user.fullName,
             "fullNameLower": user.fullName.lowercased(),
             "email": user.email,
