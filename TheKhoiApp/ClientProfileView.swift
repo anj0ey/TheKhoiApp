@@ -10,10 +10,12 @@ import SwiftUI
 struct ClientProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     
-    // 1. ADDED: FeedService to fetch real data
+    // FeedService to fetch posts
     @StateObject private var feedService = FeedService()
-
+    
+    // UI State
     @State private var selectedTab: ProfileSection = .myPosts
+    @State private var showBusinessSetup = false // 👈 Controls the Onboarding Sheet
 
     enum ProfileSection {
         case myPosts
@@ -44,160 +46,147 @@ struct ClientProfileView: View {
                                         .fill(KHOIColors.cardBackground)
                                         .frame(width: 84, height: 84)
                                         .overlay(
-                                            // TODO: Eventually load authManager.currentUser?.profileImageURL here
                                             Image(systemName: "person.fill")
+                                                .font(.system(size: 32))
                                                 .foregroundColor(KHOIColors.mutedText)
-                                                .font(.largeTitle)
                                         )
                                         .offset(x: 24, y: 40)
                                 )
                         }
                         .padding(.bottom, 40)
 
-                        // MARK: - Info
-                        VStack(alignment: .leading, spacing: 4) {
-                            // 2. UPDATED: Use real user data
-                            Text(authManager.currentUser?.fullName ?? "Your Name")
+                        // MARK: - User Info
+                        VStack(spacing: 4) {
+                            Text(authManager.currentUser?.fullName ?? "Guest User")
                                 .font(KHOITheme.heading2)
                                 .foregroundColor(KHOIColors.darkText)
                             
                             Text("@\(authManager.currentUser?.username ?? "username")")
                                 .font(KHOITheme.body)
                                 .foregroundColor(KHOIColors.mutedText)
-                            
-                            // Optional: Bio if you have it
-                            if let bio = authManager.currentUser?.bio, !bio.isEmpty {
-                                Text(bio)
-                                    .font(KHOITheme.caption)
-                                    .foregroundColor(KHOIColors.darkText)
-                                    .padding(.top, 4)
+                        }
+
+                        // MARK: - Business Onboarding / Toggle Section
+                        VStack(spacing: 12) {
+                            if authManager.isBusinessMode {
+                                // CASE A: Already in Business Mode -> Show Toggle to switch back
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text("Business Mode Active")
+                                            .font(KHOITheme.headline)
+                                        Text("You can now post and manage bookings.")
+                                            .font(KHOITheme.caption)
+                                            .foregroundColor(KHOIColors.mutedText)
+                                    }
+                                    Spacer()
+                                    Toggle("", isOn: $authManager.isBusinessMode)
+                                        .labelsHidden()
+                                        .tint(KHOIColors.accentBrown)
+                                }
+                            } else {
+                                // CASE B: Client Mode -> Show "Create Business" OR "Switch"
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text("Service Provider?")
+                                            .font(KHOITheme.headline)
+                                        Text("Create a business page to post work.")
+                                            .font(KHOITheme.caption)
+                                            .foregroundColor(KHOIColors.mutedText)
+                                    }
+                                    Spacer()
+                                    
+                                    Button(action: {
+                                        // Open the setup sheet
+                                        showBusinessSetup = true
+                                    }) {
+                                        Text("Get Started")
+                                            .font(KHOITheme.caption)
+                                            .bold()
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(KHOIColors.darkText)
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    }
+                                }
                             }
                         }
-                        .padding(.horizontal, KHOITheme.spacing_md)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        // Edit Profile Button
-                        NavigationLink(destination: EditProfileView()) {
-                            Text("Edit Profile")
-                                .font(KHOITheme.bodyBold)
-                                .foregroundColor(KHOIColors.darkText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(KHOIColors.mutedText.opacity(0.3), lineWidth: 1)
-                                )
-                        }
+                        .padding()
+                        .background(KHOIColors.cardBackground)
+                        .cornerRadius(12)
                         .padding(.horizontal, KHOITheme.spacing_md)
 
                         // MARK: - Tabs
-                        HStack(spacing: KHOITheme.spacing_md) {
-                            segmentButton(title: "My Posts", isSelected: selectedTab == .myPosts) {
+                        HStack(spacing: 0) {
+                            tabButton(title: "My Posts", isSelected: selectedTab == .myPosts) {
                                 selectedTab = .myPosts
                             }
-                            segmentButton(title: "Saved", isSelected: selectedTab == .saved) {
+                            tabButton(title: "Saved", isSelected: selectedTab == .saved) {
                                 selectedTab = .saved
                             }
-                            Spacer()
                         }
                         .padding(.horizontal, KHOITheme.spacing_md)
-                        .padding(.top, KHOITheme.spacing_sm)
 
-                        // MARK: - Grid
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 2) {
-                            
+                        // MARK: - Content Grid
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 1) {
                             if selectedTab == .myPosts {
-                                // 3. UPDATED: Logic to show real posts
-                                if feedService.isLoading {
-                                    ProgressView().padding()
-                                } else if feedService.posts.isEmpty {
-                                    emptyState(text: "No posts yet. Tap + to create one!")
-                                } else {
-                                    ForEach(feedService.posts) { post in
-                                        realPostTile(post: post)
-                                    }
+                                // In the future: Filter posts by authManager.firebaseUID
+                                ForEach(feedService.posts.prefix(4)) { post in
+                                    realPostTile(post: post)
                                 }
                             } else {
-                                // Saved posts placeholder
-                                emptyState(text: "Saved posts coming soon")
+                                emptyState(text: "No saved posts yet.")
                             }
                         }
-                        .padding(.horizontal, 2)
                     }
-                    
-                    Spacer(minLength: 40)
                 }
             }
-            // 4. ADDED: Settings Button
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gearshape")
+                    Button(action: { authManager.logOut() }) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
                             .foregroundColor(KHOIColors.darkText)
                     }
                 }
             }
-            // 5. ADDED: Fetch data when view appears
+            // 👇 THIS IS THE KEY FIX: Connects the Onboarding Sheet
+            .sheet(isPresented: $showBusinessSetup) {
+                BusinessOnboardingView()
+                    .environmentObject(authManager)
+            }
             .onAppear {
-                if let uid = authManager.firebaseUID {
-                    feedService.fetchPosts(forUserId: uid)
-                }
+                feedService.fetchPosts()
             }
         }
     }
-
-    // MARK: - Helper Views
-
-    private func segmentButton(title: String,
-                               isSelected: Bool,
-                               action: @escaping () -> Void) -> some View {
+    
+    // Helper Components
+    private func tabButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(KHOITheme.caption)
                 .padding(.horizontal, KHOITheme.spacing_md)
                 .padding(.vertical, 8)
-                .background(
-                    isSelected
-                    ? KHOIColors.accentBrown.opacity(0.12) // Updated to accentBrown
-                    : KHOIColors.cardBackground
-                )
-                .foregroundColor(
-                    isSelected
-                    ? KHOIColors.accentBrown // Updated to accentBrown
-                    : KHOIColors.darkText
-                )
-                .cornerRadius(999)
+                .background(isSelected ? KHOIColors.accentBrown.opacity(0.1) : Color.clear)
+                .foregroundColor(isSelected ? KHOIColors.accentBrown : KHOIColors.mutedText)
+                .cornerRadius(12)
         }
+        .frame(maxWidth: .infinity)
     }
 
-    // 6. ADDED: Tile that loads real images
     private func realPostTile(post: Post) -> some View {
-        AsyncImage(url: URL(string: post.imageURL)) { phase in
-            if let image = phase.image {
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Color.gray.opacity(0.2)
-            }
+        AsyncImage(url: URL(string: post.imageURL)) { img in
+            img.image?.resizable().aspectRatio(contentMode: .fill)
         }
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
+        .frame(height: 160)
         .clipped()
     }
 
     private func emptyState(text: String) -> some View {
         Text(text)
-            .font(KHOITheme.body)
+            .padding(40)
             .foregroundColor(KHOIColors.mutedText)
-            .padding(.vertical, 40)
-            .frame(maxWidth: .infinity)
-    }
-}
-
-#Preview {
-    NavigationStack {
-        ClientProfileView()
-            .environmentObject(AuthManager())
     }
 }

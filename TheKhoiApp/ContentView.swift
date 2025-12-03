@@ -995,32 +995,58 @@ struct ProfileView: View {
 // MARK: - Root View (Tab Bar)
 struct RootView: View {
     @EnvironmentObject var authManager: AuthManager
-    @StateObject private var homeViewModel = HomeViewModel()
     @State private var selectedTab = 0
-                                
+    @State private var showCreatePost = false
+    
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // TAB 0: Replaced HomeView with DiscoverView
+        TabView(selection: Binding(
+            get: { selectedTab },
+            set: { newValue in
+                // Intercept the "Post" tap (Tag 2) only if in Business Mode
+                if authManager.isBusinessMode && newValue == 2 {
+                    showCreatePost = true
+                } else {
+                    selectedTab = newValue
+                }
+            }
+        )) {
+            // TAB 0: Discover
             DiscoverView()
                 .tabItem { Label("Discover", systemImage: "magnifyingglass") }
                 .tag(0)
             
-            // TAB 1: Appointments (Keep as is)
+            // TAB 1: Appointments
             AppointmentsView()
                 .tabItem { Label("Appointments", systemImage: "calendar") }
                 .tag(1)
             
-            // TAB 2: Chats (Keep as is)
+            // MIDDLE TAB: Only for Business Mode
+            if authManager.isBusinessMode {
+                Text("") // Dummy View
+                    .tabItem {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Post")
+                    }
+                    .tag(2)
+            }
+            
+            // TAB 3: Chats
+            // Note: If Business Mode is OFF, this becomes the 3rd item visually,
+            // but we keep the tag distinct (3) to avoid confusion.
             ChatsView()
                 .tabItem { Label("Chats", systemImage: "message.fill") }
-                .tag(2)
+                .tag(3)
             
-            // TAB 3: Replaced UserProfileView with ClientProfileView
+            // TAB 4: Profile
             ClientProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
-                .tag(3)
+                .tag(4)
         }
         .tint(KHOIColors.accentBrown)
+        .sheet(isPresented: $showCreatePost) {
+            CreatePostView()
+                .environmentObject(authManager)
+        }
     }
 }
 

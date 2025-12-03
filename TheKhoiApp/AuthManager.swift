@@ -84,24 +84,43 @@ final class AuthManager: ObservableObject {
     // MARK: - Check Auth State on Launch
     
     private func checkAuthState() {
-        // Check if user is already signed into Firebase
-        if let firebaseUser = Auth.auth().currentUser {
-            print("🔥 Found existing Firebase user:", firebaseUser.uid)
-            self.firebaseUID = firebaseUser.uid
-            self.authenticatedEmail = firebaseUser.email
-            self.authenticatedName = firebaseUser.displayName
+        isCheckingAuth = true
+        
+        // 1. Check if there is a locally saved user
+        guard let user = Auth.auth().currentUser else {
+            self.isOnboardingComplete = false
+            self.needsProfileSetup = false
+            self.currentUser = nil
+            self.isCheckingAuth = false
+            return
+        }
+        
+        // 2. CRITICAL FIX: Verify with Firebase Server that this user actually exists
+        user.reload { [weak self] error in
+            guard let self = self else { return }
             
-            // Check Firestore for profile
-            checkExistingProfile(uid: firebaseUser.uid)
-        } else {
-            print("📱 No existing Firebase session")
-            // No Firebase session, check local storage
-            loadUser()
-            isCheckingAuth = false
-            
-            // If we have a local profile but no Firebase session, that's weird
-            if currentUser != nil {
-                print("⚠️ Have local profile but no Firebase session - this shouldn't happen")
+            if let error = error {
+                // ❌ Case A: User was deleted in Firebase Console!
+                print("DEBUG: User token is invalid (User deleted?). Logging out. Error: \(error.localizedDescription)")
+                
+                // Force local sign out to clean up the "Zombie" state
+                try? Auth.auth().signOut()
+                
+                // Reset state to show Login Screen
+                self.isOnboardingComplete = false
+                self.needsProfileSetup = false
+                self.currentUser = nil
+                self.isCheckingAuth = false
+                
+            } else {
+                // ✅ Case B: User is valid on server. Proceed to check Firestore.
+                print("DEBUG: User is valid. Fetching profile...")
+                self.firebaseUID = user.uid
+                self.authenticatedEmail = user.email
+                self.authenticatedName = user.displayName
+                
+                // Now we are safe to look for the profile
+                self.fetchUser(uid: user.uid)
             }
         }
     }
@@ -541,6 +560,39 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "isOnboardingComplete")
         
         print("✅ User logged out successfully")
+    }
+    
+    func fetchUser(uid: String) {
+        let db = Firestore.firestore()
+        
+        db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
+            
+            // 1. Stop the loading animation once we get a response
+            DispatchQueue.main.async {
+                self.isCheckingAuth = false
+            }
+            
+            // 2. Check if the profile exists in Firestore
+            if let document = snapshot, document.exists {
+                // ✅ Case A: User exists! Load their data and go to RootView.
+                do {
+                    self.currentUser = try document.data(as: UserProfile.self)
+                    self.isOnboardingComplete = true  // <--- KEY FIX: This lets them pass the login screen
+                    self.needsProfileSetup = false
+                } catch {
+                    print("DEBUG: Error decoding user profile: \(error)")
+                    // If data is corrupt, force them to setup again or handle error
+                    self.isOnboardingComplete = false
+                    self.needsProfileSetup = true
+                }
+            } else {
+                // ⚠️ Case B: User has a login but NO profile. Send to Profile Setup.
+                print("DEBUG: No profile found for \(uid)")
+                self.isOnboardingComplete = false
+                self.needsProfileSetup = true
+            }
+        }
     }
 }
 

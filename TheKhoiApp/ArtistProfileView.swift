@@ -2,23 +2,12 @@
 //  ArtistProfileView.swift
 //  TheKhoiApp
 //
-//  Artist profile view matching the design
+//  Created by Anjo on 12/2/25.
 //
 
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
-
-// MARK: - Artist Service Model
-struct ArtistService: Identifiable, Codable {
-    let id: String
-    var name: String
-    var description: String
-    var recommendation: String?  // "Recommended for bridal makeup"
-    var price: Double
-    var duration: Int  // minutes
-    var imageURL: String?
-}
 
 // MARK: - Artist Profile View
 struct ArtistProfileView: View {
@@ -26,729 +15,227 @@ struct ArtistProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) private var dismiss
     
-    @State private var selectedTab: ProfileTab = .posts
-    @State private var artistPosts: [Post] = []
-    @State private var artistServices: [ArtistService] = []
-    @State private var isLoading = true
-    @State private var showClaimSheet = false
+    // UI State
+    @State private var selectedTab: String = "Posts"
+    @State private var showBookingSheet = false
     @State private var isSaved = false
     
-    enum ProfileTab {
-        case posts
-        case services
-    }
-    
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             KHOIColors.background.ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 0) {
-                    // Cover Photo + Profile Card
+                    // 1. Header (Cover + Avatar)
                     headerSection
                     
-                    // Bio
-                    bioSection
+                    // 2. Info (Name, Bio, Stats)
+                    infoSection
                     
-                    // Reviews preview
-                    reviewsPreview
+                    // 3. Tabs (Posts / Services / Reviews)
+                    tabSection
                     
-                    // Book Appointment Button
-                    bookButton
+                    // 4. Content Grid
+                    if selectedTab == "Posts" {
+                        postsGrid
+                    } else if selectedTab == "Services" {
+                        servicesList
+                    } else {
+                        Text("No reviews yet.")
+                            .foregroundColor(KHOIColors.mutedText)
+                            .padding(.top, 40)
+                    }
                     
-                    // Tabs (Posts / Services)
-                    tabsSection
-                    
-                    // Content based on tab
-                    tabContent
+                    // Spacer for the floating button
+                    Color.clear.frame(height: 100)
                 }
+            }
+            
+            // 5. FLOATING BOOK BUTTON
+            VStack {
+                Spacer()
+                Button(action: {
+                    showBookingSheet = true
+                }) {
+                    Text("Book Appointment")
+                        .font(KHOITheme.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(KHOIColors.darkText)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                }
+                .padding(.horizontal, KHOITheme.spacing_md)
+                .padding(.bottom, KHOITheme.spacing_lg)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(artist.username)
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.darkText)
-            }
-            
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: KHOITheme.spacing_md) {
-                    Button {
-                        isSaved.toggle()
-                    } label: {
-                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                            .foregroundColor(KHOIColors.darkText)
-                    }
-                    
-                    Button {
-                        // Share
-                    } label: {
-                        Image(systemName: "paperplane")
-                            .foregroundColor(KHOIColors.darkText)
-                    }
-                    
-                    Button {
-                        // Message
-                    } label: {
-                        Image(systemName: "message")
-                            .foregroundColor(KHOIColors.darkText)
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showClaimSheet) {
-            ClaimProfileSheet(artist: artist)
-        }
-        .onAppear {
-            fetchArtistData()
+        // 👇 THIS PRESENTS THE BOOKING SHEET
+        .sheet(isPresented: $showBookingSheet) {
+            BookingSheetView(artist: artist, isPresented: $showBookingSheet)
         }
     }
     
-    // MARK: - Header Section (Cover + Profile Card)
+    // MARK: - Components
+    
     private var headerSection: some View {
-        ZStack(alignment: .bottom) {
+        ZStack(alignment: .bottomLeading) {
             // Cover Image
-            if let coverURL = artist.coverImageURL, let url = URL(string: coverURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(KHOIColors.chipBackground)
-                }
-                .frame(height: 140)
+            Rectangle()
+                .fill(KHOIColors.cardBackground)
+                .frame(height: 180)
+                .overlay(
+                    AsyncImage(url: URL(string: artist.coverImageURL ?? "")) { img in
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.1)
+                    }
+                )
                 .clipped()
-            } else if let profileURL = artist.profileImageURL, let url = URL(string: profileURL) {
-                // Use profile image as cover with blur
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .blur(radius: 20)
-                } placeholder: {
-                    Rectangle().fill(KHOIColors.chipBackground)
-                }
-                .frame(height: 140)
-                .clipped()
-            } else {
-                Rectangle()
-                    .fill(KHOIColors.softBrown.opacity(0.3))
-                    .frame(height: 140)
-            }
             
-            // Profile Card
-            profileCard
-                .offset(y: 60)
+            // Avatar
+            Circle()
+                .stroke(KHOIColors.background, lineWidth: 4)
+                .background(Circle().fill(KHOIColors.cardBackground))
+                .frame(width: 90, height: 90)
+                .overlay(
+                    AsyncImage(url: URL(string: artist.profileImageURL ?? "")) { img in
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "person.fill")
+                            .foregroundColor(KHOIColors.mutedText)
+                    }
+                    .clipShape(Circle())
+                )
+                .offset(x: 20, y: 45) // Push it half out
         }
-        .padding(.bottom, 70)
+        .padding(.bottom, 50) // Make room for the avatar
     }
     
-    // MARK: - Profile Card
-    private var profileCard: some View {
-        HStack(alignment: .top, spacing: KHOITheme.spacing_md) {
-            // Profile Image
-            profileImage
-            
-            // Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(artist.fullName)
-                    .font(KHOITheme.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                // Referrals
-                HStack(spacing: 4) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.caption2)
-                        .foregroundColor(.red.opacity(0.8))
-                    Text("\(artist.referralCount) referrals")
-                        .font(KHOITheme.caption)
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(artist.fullName)
+                        .font(KHOITheme.heading2)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text("@\(artist.username)")
+                        .font(KHOITheme.body)
                         .foregroundColor(KHOIColors.mutedText)
                 }
+                Spacer()
                 
-                // Location
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .font(.caption2)
-                        .foregroundColor(KHOIColors.mutedText)
-                    Text(artist.city)
-                        .font(KHOITheme.caption)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                
-                // Service Tags
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(artist.services.prefix(3), id: \.self) { service in
-                            ServiceTagBadge(service: service)
-                        }
+                // Save / Share Buttons
+                HStack(spacing: 12) {
+                    Button(action: { isSaved.toggle() }) {
+                        Image(systemName: isSaved ? "heart.fill" : "heart")
+                            .foregroundColor(isSaved ? KHOIColors.accentBrown : KHOIColors.darkText)
+                            .font(.system(size: 20))
+                            .padding(10)
+                            .background(KHOIColors.cardBackground)
+                            .clipShape(Circle())
                     }
                 }
-                .padding(.top, 4)
             }
             
-            Spacer()
-        }
-        .padding()
-        .background(KHOIColors.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_lg))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
-        .padding(.horizontal)
-    }
-    
-    // MARK: - Profile Image
-    private var profileImage: some View {
-        Group {
-            if let imageURL = artist.profileImageURL, let url = URL(string: imageURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle()
-                        .fill(KHOIColors.chipBackground)
-                        .overlay(
-                            Text(artist.fullName.prefix(1).uppercased())
-                                .font(KHOITheme.title2)
-                                .foregroundColor(KHOIColors.mutedText)
-                        )
-                }
-            } else {
-                Circle()
-                    .fill(KHOIColors.chipBackground)
-                    .overlay(
-                        Text(artist.fullName.prefix(1).uppercased())
-                            .font(KHOITheme.title2)
-                            .foregroundColor(KHOIColors.mutedText)
-                    )
-            }
-        }
-        .frame(width: 80, height: 80)
-        .clipShape(Circle())
-        .overlay(
-            Circle()
-                .stroke(KHOIColors.cardBackground, lineWidth: 3)
-        )
-    }
-    
-    // MARK: - Bio Section
-    private var bioSection: some View {
-        Group {
             if !artist.bio.isEmpty {
                 Text(artist.bio)
                     .font(KHOITheme.body)
                     .foregroundColor(KHOIColors.darkText)
-                    .padding(.horizontal)
-                    .padding(.top, KHOITheme.spacing_sm)
+                    .lineLimit(3)
             }
+            
+            // Stats
+            HStack(spacing: 24) {
+                statItem(value: "\(artist.referralCount)", label: "Referrals")
+                statItem(value: String(format: "%.1f", artist.rating ?? 5.0), label: "Rating")
+                statItem(value: artist.city, label: "Location")
+            }
+            .padding(.top, 8)
         }
+        .padding(.horizontal, KHOITheme.spacing_md)
     }
     
-    // MARK: - Reviews Preview
-    private var reviewsPreview: some View {
-        Button {
-            // Navigate to reviews
-        } label: {
-            HStack {
-                // Reviewer avatars (overlapping)
-                HStack(spacing: -8) {
-                    ForEach(0..<3, id: \.self) { index in
-                        Circle()
-                            .fill(Color(hex: ["E8B4B8", "A89080", "D4A574"][index]))
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Circle().stroke(KHOIColors.cardBackground, lineWidth: 2)
-                            )
-                    }
-                }
-                
-                Text("\(artist.reviewCount) client reviews")
-                    .font(KHOITheme.callout)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(KHOIColors.mutedText)
-            }
-            .padding()
-        }
-        .buttonStyle(.plain)
-    }
-    
-    // MARK: - Book Button
-    private var bookButton: some View {
-        Button {
-            // Book appointment action
-        } label: {
-            Text("Book Appointment")
+    private func statItem(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
                 .font(KHOITheme.headline)
                 .foregroundColor(KHOIColors.darkText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, KHOITheme.spacing_md)
-                .background(KHOIColors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                .overlay(
-                    RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md)
-                        .stroke(KHOIColors.divider, lineWidth: 1)
-                )
+            Text(label)
+                .font(KHOITheme.caption)
+                .foregroundColor(KHOIColors.mutedText)
         }
-        .padding(.horizontal)
+    }
+    
+    private var tabSection: some View {
+        HStack(spacing: 0) {
+            tabButton(title: "Posts")
+            tabButton(title: "Services")
+            tabButton(title: "Reviews")
+        }
+        .padding(.top, KHOITheme.spacing_lg)
         .padding(.bottom, KHOITheme.spacing_md)
+        .padding(.horizontal, KHOITheme.spacing_md)
     }
     
-    // MARK: - Tabs Section
-    private var tabsSection: some View {
-        HStack {
-            // Posts Tab
-            Button {
-                selectedTab = .posts
-            } label: {
-                VStack(spacing: 8) {
-                    Image(systemName: "square.grid.3x3.fill")
-                        .font(.title3)
-                        .foregroundColor(selectedTab == .posts ? KHOIColors.darkText : KHOIColors.mutedText)
-                    
-                    Rectangle()
-                        .fill(selectedTab == .posts ? KHOIColors.darkText : Color.clear)
-                        .frame(height: 2)
-                }
-            }
-            .frame(maxWidth: .infinity)
+    private func tabButton(title: String) -> some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(KHOITheme.headline)
+                .foregroundColor(selectedTab == title ? KHOIColors.darkText : KHOIColors.mutedText)
             
-            // Services Tab (99 icon from design)
-            Button {
-                selectedTab = .services
-            } label: {
-                VStack(spacing: 8) {
-                    Text("99")
-                        .font(KHOITheme.headline)
-                        .foregroundColor(selectedTab == .services ? KHOIColors.darkText : KHOIColors.mutedText)
-                    
-                    Rectangle()
-                        .fill(selectedTab == .services ? KHOIColors.darkText : Color.clear)
-                        .frame(height: 2)
-                }
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal)
-    }
-    
-    // MARK: - Tab Content
-    @ViewBuilder
-    private var tabContent: some View {
-        switch selectedTab {
-        case .posts:
-            postsGrid
-        case .services:
-            servicesList
-        }
-    }
-    
-    // MARK: - Posts Grid
-    private var postsGrid: some View {
-        Group {
-            if isLoading {
-                ProgressView()
-                    .padding()
-            } else if artistPosts.isEmpty {
-                VStack(spacing: KHOITheme.spacing_md) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.largeTitle)
-                        .foregroundColor(KHOIColors.mutedText)
-                    Text("No posts yet")
-                        .font(KHOITheme.body)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                .padding(.vertical, KHOITheme.spacing_xxl)
-            } else {
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: 2),
-                    GridItem(.flexible(), spacing: 2),
-                    GridItem(.flexible(), spacing: 2)
-                ], spacing: 2) {
-                    ForEach(artistPosts) { post in
-                        PostGridItem(post: post)
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Services List
-    private var servicesList: some View {
-        LazyVStack(spacing: KHOITheme.spacing_md) {
-            ForEach(artistServices) { service in
-                ServiceCard(service: service)
-            }
-            
-            // If no services, show placeholder
-            if artistServices.isEmpty && !isLoading {
-                VStack(spacing: KHOITheme.spacing_md) {
-                    Image(systemName: "list.bullet.clipboard")
-                        .font(.largeTitle)
-                        .foregroundColor(KHOIColors.mutedText)
-                    Text("No services listed yet")
-                        .font(KHOITheme.body)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                .padding(.vertical, KHOITheme.spacing_xxl)
-            }
-        }
-        .padding()
-    }
-    
-    // MARK: - Data Fetching
-    private func fetchArtistData() {
-        let db = Firestore.firestore()
-        
-        // Fetch posts
-        db.collection("posts")
-            .whereField("artistId", isEqualTo: artist.id)
-            .order(by: "createdAt", descending: true)
-            .getDocuments { snapshot, error in
-                if let documents = snapshot?.documents {
-                    artistPosts = documents.compactMap { Post(document: $0) }
-                }
-            }
-        
-        // Fetch services
-        db.collection("artists")
-            .document(artist.id)
-            .collection("services")
-            .order(by: "price")
-            .getDocuments { snapshot, error in
-                isLoading = false
-                if let documents = snapshot?.documents {
-                    artistServices = documents.compactMap { doc -> ArtistService? in
-                        let data = doc.data()
-                        return ArtistService(
-                            id: doc.documentID,
-                            name: data["name"] as? String ?? "",
-                            description: data["description"] as? String ?? "",
-                            recommendation: data["recommendation"] as? String,
-                            price: data["price"] as? Double ?? 0,
-                            duration: data["duration"] as? Int ?? 60,
-                            imageURL: data["imageURL"] as? String
-                        )
-                    }
-                }
-            }
-    }
-}
-
-// MARK: - Service Tag Badge
-struct ServiceTagBadge: View {
-    let service: String
-    
-    var tagColor: Color {
-        switch service.lowercased() {
-        case "makeup": return Color(hex: "E8B4B8")
-        case "hair": return Color(hex: "A89080")
-        case "nails": return Color(hex: "D4A574")
-        case "lashes": return Color(hex: "B8A9C9")
-        case "skin": return Color(hex: "F5CBA7")
-        case "brows": return Color(hex: "C9B99A")
-        default: return KHOIColors.chipBackground
-        }
-    }
-    
-    var body: some View {
-        Text(service.uppercased())
-            .font(KHOITheme.caption2)
-            .fontWeight(.semibold)
-            .foregroundColor(KHOIColors.darkText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(tagColor)
-            .clipShape(Capsule())
-    }
-}
-
-// MARK: - Post Grid Item
-struct PostGridItem: View {
-    let post: Post
-    
-    var body: some View {
-        if let url = URL(string: post.imageURL), !post.imageURL.isEmpty {
-            AsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .aspectRatio(1, contentMode: .fill)
-            } placeholder: {
-                Rectangle()
-                    .fill(KHOIColors.chipBackground)
-            }
-            .aspectRatio(1, contentMode: .fill)
-            .clipped()
-        } else {
             Rectangle()
-                .fill(KHOIColors.chipBackground)
-                .aspectRatio(1, contentMode: .fill)
-                .overlay(
-                    Image(systemName: "photo")
-                        .foregroundColor(KHOIColors.mutedText)
-                )
+                .fill(selectedTab == title ? KHOIColors.accentBrown : Color.clear)
+                .frame(height: 2)
+        }
+        .frame(maxWidth: .infinity)
+        .onTapGesture {
+            withAnimation { selectedTab = title }
         }
     }
-}
-
-// MARK: - Service Card
-struct ServiceCard: View {
-    let service: ArtistService
     
-    var body: some View {
-        HStack(spacing: KHOITheme.spacing_md) {
-            // Service Image
-            if let imageURL = service.imageURL, let url = URL(string: imageURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(KHOIColors.chipBackground)
-                }
-                .frame(width: 100, height: 100)
-                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_sm))
-            } else {
-                Rectangle()
-                    .fill(KHOIColors.chipBackground)
-                    .frame(width: 100, height: 100)
-                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_sm))
-                    .overlay(
-                        Image(systemName: "sparkles")
-                            .foregroundColor(KHOIColors.mutedText)
-                    )
+    private var postsGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            // Placeholder posts for now
+            ForEach(0..<4, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.1))
+                    .frame(height: 200)
             }
-            
-            // Service Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(service.name)
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text(service.description)
-                    .font(KHOITheme.caption)
-                    .foregroundColor(KHOIColors.mutedText)
-                    .lineLimit(2)
-                
-                if let recommendation = service.recommendation {
-                    Text(recommendation)
-                        .font(KHOITheme.caption)
-                        .italic()
-                        .foregroundColor(KHOIColors.accentBrown)
-                }
-                
+        }
+        .padding(KHOITheme.spacing_md)
+    }
+    
+    private var servicesList: some View {
+        VStack(spacing: 16) {
+            ForEach(artist.services, id: \.self) { service in
                 HStack {
-                    Text("$\(Int(service.price))")
-                        .font(KHOITheme.headline)
-                        .foregroundColor(KHOIColors.darkText)
-                    
-                    Text("/ \(service.duration) min")
-                        .font(KHOITheme.caption)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-            }
-            
-            Spacer()
-        }
-        .padding()
-        .background(KHOIColors.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-    }
-}
-
-// MARK: - Claim Profile Sheet
-struct ClaimProfileSheet: View {
-    let artist: Artist
-    @EnvironmentObject var authManager: AuthManager
-    @StateObject private var feedService = FeedService()
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var verificationNote = ""
-    @State private var instagramHandle = ""
-    @State private var isSubmitting = false
-    @State private var showSuccess = false
-    @State private var errorMessage: String?
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                KHOIColors.background.ignoresSafeArea()
-                
-                if showSuccess {
-                    successView
-                } else {
-                    formView
-                }
-            }
-            .navigationTitle("Claim Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-    }
-    
-    private var formView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-                // Artist Info
-                HStack(spacing: KHOITheme.spacing_md) {
-                    Circle()
-                        .fill(KHOIColors.chipBackground)
-                        .frame(width: 60, height: 60)
-                        .overlay(
-                            Text(artist.fullName.prefix(1).uppercased())
-                                .font(KHOITheme.title2)
-                                .foregroundColor(KHOIColors.mutedText)
-                        )
-                    
                     VStack(alignment: .leading) {
-                        Text(artist.fullName)
-                            .font(KHOITheme.headline)
-                            .foregroundColor(KHOIColors.darkText)
-                        Text(artist.displayHandle)
-                            .font(KHOITheme.callout)
+                        Text(service)
+                            .font(KHOITheme.body)
+                            .bold()
+                        Text("1 hr • $80") // Placeholder data
+                            .font(KHOITheme.caption)
                             .foregroundColor(KHOIColors.mutedText)
                     }
+                    Spacer()
+                    Button("Book") {
+                        showBookingSheet = true
+                    }
+                    .font(KHOITheme.caption.bold())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(KHOIColors.darkText)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
                 }
                 .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(KHOIColors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                
-                Text("To verify you own this profile, please provide:")
-                    .font(KHOITheme.body)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                // Instagram Handle
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Your Instagram Handle")
-                        .font(KHOITheme.callout)
-                        .foregroundColor(KHOIColors.mutedText)
-                    
-                    TextField("@yourhandle", text: $instagramHandle)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding()
-                        .background(KHOIColors.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                }
-                
-                // Verification Note
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("How can we verify this is you?")
-                        .font(KHOITheme.callout)
-                        .foregroundColor(KHOIColors.mutedText)
-                    
-                    TextEditor(text: $verificationNote)
-                        .frame(minHeight: 100)
-                        .padding(10)
-                        .background(KHOIColors.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                    
-                    Text("Example: DM us from your Instagram, or describe your business")
-                        .font(KHOITheme.caption)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .font(KHOITheme.caption)
-                        .foregroundColor(.red)
-                }
-                
-                // Submit Button
-                Button {
-                    submitClaim()
-                } label: {
-                    HStack {
-                        if isSubmitting {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        }
-                        Text(isSubmitting ? "Submitting..." : "Submit Claim Request")
-                            .font(KHOITheme.headline)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, KHOITheme.spacing_lg)
-                    .background(canSubmit ? KHOIColors.accentBrown : KHOIColors.mutedText)
-                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                }
-                .disabled(!canSubmit || isSubmitting)
-            }
-            .padding()
-        }
-    }
-    
-    private var successView: some View {
-        VStack(spacing: KHOITheme.spacing_xl) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green)
-            
-            Text("Request Submitted!")
-                .font(KHOITheme.title2)
-                .foregroundColor(KHOIColors.darkText)
-            
-            Text("We'll review your claim and get back to you within 24-48 hours.")
-                .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.mutedText)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button {
-                dismiss()
-            } label: {
-                Text("Done")
-                    .font(KHOITheme.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, KHOITheme.spacing_lg)
-                    .background(KHOIColors.accentBrown)
-                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-            }
-            .padding(.horizontal)
-        }
-    }
-    
-    private var canSubmit: Bool {
-        !verificationNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    
-    private func submitClaim() {
-        guard let userId = authManager.firebaseUID,
-              let user = authManager.currentUser else {
-            errorMessage = "Please sign in to claim this profile"
-            return
-        }
-        
-        isSubmitting = true
-        errorMessage = nil
-        
-        feedService.submitClaimRequest(
-            artistId: artist.id,
-            userId: userId,
-            userEmail: user.email,
-            userName: user.fullName,
-            verificationNote: verificationNote.trimmingCharacters(in: .whitespacesAndNewlines),
-            instagramHandle: instagramHandle.isEmpty ? nil : instagramHandle
-        ) { result in
-            isSubmitting = false
-            
-            switch result {
-            case .success:
-                showSuccess = true
-            case .failure(let error):
-                errorMessage = error.localizedDescription
+                .cornerRadius(12)
             }
         }
+        .padding(KHOITheme.spacing_md)
     }
 }
