@@ -51,6 +51,10 @@ struct KHOIColors {
     static let divider = Color(hex: "E8E3DD")
     static let chipBackground = Color(hex: "EDE8E3")
     static let selectedChip = accentBrown
+    
+    // NEW: Aliases for new profile views
+    static let accent = accentBrown
+    static let danger = Color.red
 }
 
 extension Color {
@@ -86,6 +90,12 @@ struct KHOITheme {
     static let callout = Font.custom("Switzer-Regular", size: 14)
     static let caption = Font.custom("Switzer-Regular", size: 12)
     static let caption2 = Font.custom("Switzer-Regular", size: 10)
+    
+    // NEW: Additional fonts for profile views
+    static let heading2 = Font.custom("Switzer-Regular", size: 22)
+    static let heading3 = Font.custom("Switzer-Regular", size: 20)
+    static let bodyBold = Font.custom("Switzer-Semibold", size: 16)
+    static let captionUppercase = Font.custom("Switzer-Regular", size: 11)
 
     static let spacing_xs: CGFloat = 4
     static let spacing_sm: CGFloat = 8
@@ -98,6 +108,9 @@ struct KHOITheme {
     static let cornerRadius_md: CGFloat = 12
     static let cornerRadius_lg: CGFloat = 16
     static let cornerRadius_pill: CGFloat = 100
+    
+    // NEW: Alias for consistency
+    static let radius_lg: CGFloat = 16
 }
 
 // MARK: - Service Category
@@ -897,89 +910,7 @@ struct Appointments: View {
     }
 }
 
-// MARK: - Profile View
-struct ProfileView: View {
-    @EnvironmentObject var authManager: AuthManager
-    @ObservedObject var viewModel: HomeViewModel
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                KHOIColors.background.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
-                        if let user = authManager.currentUser {
-                            VStack(spacing: 4) {
-                                Text("@\(user.username)")
-                                    .font(KHOITheme.title2)
-                                    .foregroundColor(KHOIColors.darkText)
-
-                                if !user.bio.isEmpty {
-                                    Text(user.bio)
-                                        .font(KHOITheme.body)
-                                        .foregroundColor(KHOIColors.mutedText)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, KHOITheme.spacing_xl)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, KHOITheme.spacing_xl)
-                        } else {
-                            Text("No profile yet")
-                                .font(KHOITheme.body)
-                                .foregroundColor(KHOIColors.mutedText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, KHOITheme.spacing_xl)
-                        }
-
-                        Text("My Collection")
-                            .font(KHOITheme.headline)
-                            .foregroundColor(KHOIColors.darkText)
-                            .padding(.horizontal, KHOITheme.spacing_lg)
-                            .padding(.top, KHOITheme.spacing_lg)
-
-                        if viewModel.savedPosts.isEmpty {
-                            Text("Save looks you love from Discover to see them here.")
-                                .font(KHOITheme.body)
-                                .foregroundColor(KHOIColors.mutedText)
-                                .padding(.horizontal, KHOITheme.spacing_lg)
-                                .padding(.top, KHOITheme.spacing_md)
-                        } else {
-                            MasonryGrid(
-                                items: viewModel.savedPosts,
-                                columns: 2,
-                                spacing: KHOITheme.spacing_md
-                            ) { post, width in
-                                PostCard(
-                                    post: post,
-                                    width: width,
-                                    isSaved: viewModel.isSaved(post),
-                                    onSaveTap: { viewModel.toggleSave(for: post) }
-                                )
-                            }
-                        }
-
-                        Button(action: { authManager.logOut() }) {
-                            Text("Log Out")
-                                .foregroundColor(.red)
-                                .font(KHOITheme.body)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(KHOIColors.cardBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_md))
-                                .padding(.horizontal)
-                        }
-                        .padding(.top, KHOITheme.spacing_xl)
-                    }
-                }
-            }
-            .navigationTitle("Profile")
-        }
-    }
-}
-
-// MARK: - Root View (Tab Bar)
+// MARK: - Root View (Tab Bar) - UPDATED
 struct RootView: View {
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var homeViewModel = HomeViewModel()
@@ -999,7 +930,8 @@ struct RootView: View {
                 .tabItem { Label("Chats", systemImage: "message.fill") }
                 .tag(2)
                                         
-            ProfileView(viewModel: homeViewModel)
+            // UPDATED: Using new ClientProfileView
+            ClientProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(3)
         }
