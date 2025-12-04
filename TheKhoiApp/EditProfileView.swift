@@ -2,173 +2,308 @@
 //  EditProfileView.swift
 //  TheKhoiApp
 //
-//  Created by Paige McNamara-Pittler on 12/2/25.
+//  Edit profile with image upload support
 //
 
 import SwiftUI
-import FirebaseFirestore
+import PhotosUI
 
 struct EditProfileView: View {
     @EnvironmentObject var authManager: AuthManager
-
+    @Environment(\.dismiss) var dismiss
+    
+    // Form fields
     @State private var displayName: String = ""
     @State private var username: String = ""
     @State private var bio: String = ""
     @State private var location: String = ""
-
+    
+    // Image picker state
+    @State private var selectedProfileItem: PhotosPickerItem? = nil
+    @State private var selectedCoverItem: PhotosPickerItem? = nil
+    @State private var profileImage: UIImage? = nil
+    @State private var coverImage: UIImage? = nil
+    
+    // Loading states
+    @State private var isSaving = false
+    @State private var isUploadingProfile = false
+    @State private var isUploadingCover = false
+    
     var body: some View {
         ZStack {
             KHOIColors.background
                 .ignoresSafeArea()
-
+            
             ScrollView {
                 VStack(spacing: KHOITheme.spacing_lg) {
-
-                    // Title
-                    HStack {
-                        Text("Edit profile")
-                            .font(KHOITheme.heading2)
-                            .foregroundColor(KHOIColors.darkText)
-                        Spacer()
-                    }
-                    .padding(.horizontal, KHOITheme.spacing_md)
-                    .padding(.top, KHOITheme.spacing_md)
-
-                    // Avatar / header
-                    HStack {
-                        Spacer()
-                        ZStack {
-                            Circle()
-                                .fill(KHOIColors.cardBackground)
-                                .frame(width: 88, height: 88)
-
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(KHOIColors.mutedText)
-
-                            Circle()
-                                .fill(KHOIColors.accent)
-                                .frame(width: 30, height: 30)
-                                .overlay(
-                                    Image(systemName: "camera.fill")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.white)
-                                )
-                                .offset(x: 30, y: 30)
-                        }
-                        Spacer()
-                    }
-
-                    // Form fields card
-                    VStack(spacing: KHOITheme.spacing_md) {
-                        
-                        // 1. Display Name
-                        SettingsFieldSection(title: "Display name") {
-                            TextField("Display name", text: $displayName)
-                                .textFieldStyle(.plain)
-                                .font(KHOITheme.body)
-                        }
-
-                        // 2. Username
-                        SettingsFieldSection(title: "Username") {
-                            TextField("Username", text: $username)
-                                .textFieldStyle(.plain)
-                                .font(KHOITheme.body)
-                                .textInputAutocapitalization(.never)
-                        }
-
-                        // 3. Bio
-                        SettingsFieldSection(title: "Bio") {
-                            TextField("Bio", text: $bio)
-                                .textFieldStyle(.plain)
-                                .font(KHOITheme.body)
-                        }
-
-                        // 4. Location
-                        SettingsFieldSection(title: "Location") {
-                            TextField("Location", text: $location)
-                                .textFieldStyle(.plain)
-                                .font(KHOITheme.body)
-                        }
-                    }                    .padding(.horizontal, KHOITheme.spacing_md)
-
+                    
+                    // MARK: - Cover Image Section
+                    coverImageSection
+                    
+                    // MARK: - Profile Picture Section
+                    profilePictureSection
+                        .offset(y: -50)
+                        .padding(.bottom, -40)
+                    
+                    // MARK: - Form Fields
+                    formFieldsSection
+                    
                     Spacer(minLength: 40)
                 }
             }
         }
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("EDIT PROFILE")
+                    .font(KHOITheme.headline)
+                    .foregroundColor(KHOIColors.mutedText)
+                    .tracking(2)
+            }
+
+            // Keep your Save button
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Save") {
                     saveProfile()
                 }
                 .font(KHOITheme.bodyBold)
+                .foregroundColor(KHOIColors.accentBrown)
+                .disabled(isSaving)
             }
         }
+
         .onAppear {
             loadExistingProfile()
         }
+        .onChange(of: selectedProfileItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    profileImage = uiImage
+                    uploadProfileImage(uiImage)
+                }
+            }
+        }
+        .onChange(of: selectedCoverItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    coverImage = uiImage
+                    uploadCoverImage(uiImage)
+                }
+            }
+        }
     }
-
+    
+    // MARK: - Cover Image Section
+    private var coverImageSection: some View {
+        ZStack(alignment: .bottomTrailing) {
+            // Cover image
+            if let coverImage = coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 160)
+                    .clipped()
+            } else if let coverURL = authManager.currentUser?.coverImageURL,
+                      let url = URL(string: coverURL), !coverURL.isEmpty {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    defaultCoverGradient
+                }
+                .frame(height: 160)
+                .clipped()
+            } else {
+                defaultCoverGradient
+                    .frame(height: 160)
+            }
+            
+            // Loading overlay
+            if isUploadingCover {
+                Color.black.opacity(0.4)
+                    .frame(height: 160)
+                    .overlay(ProgressView().tint(.white))
+            }
+            
+            // Edit button
+            PhotosPicker(selection: $selectedCoverItem, matching: .images) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(10)
+                    .background(KHOIColors.accentBrown)
+                    .clipShape(Circle())
+            }
+            .padding(12)
+            .disabled(isUploadingCover)
+        }
+    }
+    
+    private var defaultCoverGradient: some View {
+        LinearGradient(
+            colors: [Color(hex: "8B4D5C"), Color(hex: "C4A07C")],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    // MARK: - Profile Picture Section
+    private var profilePictureSection: some View {
+        ZStack {
+            Circle()
+                .fill(KHOIColors.background)
+                .frame(width: 100, height: 100)
+            
+            // Profile image
+            if let profileImage = profileImage {
+                Image(uiImage: profileImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 92, height: 92)
+                    .clipShape(Circle())
+            } else if let profileURL = authManager.currentUser?.profileImageURL,
+                      let url = URL(string: profileURL), !profileURL.isEmpty {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    defaultAvatar
+                }
+                .frame(width: 92, height: 92)
+                .clipShape(Circle())
+            } else {
+                defaultAvatar
+            }
+            
+            // Loading overlay
+            if isUploadingProfile {
+                Circle()
+                    .fill(Color.black.opacity(0.4))
+                    .frame(width: 92, height: 92)
+                    .overlay(ProgressView().tint(.white))
+            }
+            
+            // Edit button
+            PhotosPicker(selection: $selectedProfileItem, matching: .images) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(8)
+                    .background(KHOIColors.accentBrown)
+                    .clipShape(Circle())
+            }
+            .offset(x: 35, y: 35)
+            .disabled(isUploadingProfile)
+        }
+    }
+    
+    private var defaultAvatar: some View {
+        Circle()
+            .fill(KHOIColors.chipBackground)
+            .frame(width: 92, height: 92)
+            .overlay(
+                Image(systemName: "person.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(KHOIColors.mutedText)
+            )
+    }
+    
+    // MARK: - Form Fields Section
+    private var formFieldsSection: some View {
+        VStack(spacing: KHOITheme.spacing_md) {
+            // Display Name
+            EditProfileField(title: "Display name", text: $displayName)
+            
+            // Username
+            EditProfileField(title: "Username", text: $username)
+                .textInputAutocapitalization(.never)
+            
+            // Bio
+            EditProfileField(title: "Bio", text: $bio, isMultiline: true)
+            
+            // Location
+            EditProfileField(title: "Location", text: $location)
+        }
+        .padding(.horizontal, KHOITheme.spacing_md)
+    }
+    
+    // MARK: - Actions
+    
     private func loadExistingProfile() {
         guard let user = authManager.currentUser else { return }
         displayName = user.fullName
         username = user.username
-        
-        // 1. Bio is not optional in your model, so remove '?? ""'
         bio = user.bio
-        
-        // 2. Location is now optional (String?), so keep '?? ""' to handle nil
         location = user.location ?? ""
     }
-
+    
     private func saveProfile() {
-        guard let uid = authManager.firebaseUID else { return }
+        isSaving = true
         
-        let db = Firestore.firestore()
-        
-        // Update the 'users' collection
-        db.collection("users").document(uid).updateData([
-            "fullName": displayName,
-            "username": username,
-            "bio": bio,
-            "location": location // Ensure your UserProfile model has this field, or remove it
-        ]) { error in
-            if let error = error {
-                print("Error saving profile: \(error)")
-            } else {
-                print("Profile updated!")
-                // You might want to refresh AuthManager local user data here
+        authManager.updateProfile(
+            fullName: displayName,
+            username: username,
+            bio: bio,
+            location: location
+        ) { success in
+            isSaving = false
+            if success {
+                dismiss()
+            }
+        }
+    }
+    
+    private func uploadProfileImage(_ image: UIImage) {
+        isUploadingProfile = true
+        authManager.uploadProfileImage(image) { success in
+            isUploadingProfile = false
+            if !success {
+                print("Failed to upload profile image")
+            }
+        }
+    }
+    
+    private func uploadCoverImage(_ image: UIImage) {
+        isUploadingCover = true
+        authManager.uploadCoverImage(image) { success in
+            isUploadingCover = false
+            if !success {
+                print("Failed to upload cover image")
             }
         }
     }
 }
 
-// MARK: - Small helper for labeled fields
-
-private struct SettingsFieldSection<Content: View>: View {
+// MARK: - Edit Profile Field Component
+struct EditProfileField: View {
     let title: String
-    let content: Content
-
-    // 👇 THIS INIT IS THE KEY FIX
-    init(title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
+    @Binding var text: String
+    var isMultiline: Bool = false
+    
     var body: some View {
         VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
-            Text(title)
+            Text(title.uppercased())
                 .font(KHOITheme.captionUppercase)
                 .foregroundColor(KHOIColors.mutedText)
-
-            VStack {
-                content
-                    .padding(.vertical, KHOITheme.spacing_sm)
-                    .padding(.horizontal, KHOITheme.spacing_md)
+                .tracking(1)
+            
+            if isMultiline {
+                TextEditor(text: $text)
+                    .font(KHOITheme.body)
+                    .frame(minHeight: 80)
+                    .padding(12)
+                    .background(KHOIColors.cardBackground)
+                    .cornerRadius(KHOITheme.radius_lg)
+            } else {
+                TextField("", text: $text)
+                    .font(KHOITheme.body)
+                    .padding(14)
+                    .background(KHOIColors.cardBackground)
+                    .cornerRadius(KHOITheme.radius_lg)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KHOIColors.cardBackground)
-            .cornerRadius(KHOITheme.radius_lg)
         }
     }
 }

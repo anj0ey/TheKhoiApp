@@ -2,13 +2,14 @@
 //  SettingsView.swift
 //  TheKhoiApp
 //
-//  Created by Paige McNamara-Pittler on 12/2/25.
+//  Settings with Edit Profile navigation
 //
 
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var authManager: AuthManager
+    @Environment(\.dismiss) var dismiss
 
     @State private var pushNotifications = true
     @State private var darkMode = false
@@ -21,19 +22,36 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-
+                    
+                    Spacer()
+                    
                     // MARK: - Title
-                    Text("Settings")
-                        .font(KHOITheme.heading2)
-                        .foregroundColor(KHOIColors.darkText)
-                        .padding(.horizontal, KHOITheme.spacing_md)
-                        .padding(.top, KHOITheme.spacing_md)
+                    HStack {
+                        Text("SETTINGS")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .tracking(2)
+                        
+                        Spacer()
+                        
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(KHOIColors.mutedText)
+                                .padding(8)
+                                .background(KHOIColors.chipBackground)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.horizontal, KHOITheme.spacing_md)
+                    .padding(.top, KHOITheme.spacing_md)
 
                     // MARK: - Account Section
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
-                        Text("Account")
+                        Text("ACCOUNT")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
+                            .tracking(1)
                             .padding(.horizontal, KHOITheme.spacing_md)
 
                         SettingsCard {
@@ -52,11 +70,16 @@ struct SettingsView: View {
                                     )
 
                                     Divider()
+                                    
+                                    SettingsValueRow(
+                                        title: "Email",
+                                        value: user.email
+                                    )
+
+                                    Divider()
                                 }
 
-                                Button {
-                                    // TODO: Navigate to Edit Profile screen when implemented
-                                } label: {
+                                NavigationLink(destination: EditProfileView().environmentObject(authManager)) {
                                     SettingsChevronRow(title: "Edit profile")
                                 }
                             }
@@ -65,9 +88,10 @@ struct SettingsView: View {
 
                     // MARK: - Preferences Section
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
-                        Text("Preferences")
+                        Text("PREFERENCES")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
+                            .tracking(1)
                             .padding(.horizontal, KHOITheme.spacing_md)
 
                         SettingsCard {
@@ -96,9 +120,10 @@ struct SettingsView: View {
 
                     // MARK: - Support Section
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
-                        Text("Support")
+                        Text("SUPPORT")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
+                            .tracking(1)
                             .padding(.horizontal, KHOITheme.spacing_md)
 
                         SettingsCard {
@@ -116,6 +141,22 @@ struct SettingsView: View {
                                 } label: {
                                     SettingsChevronRow(title: "Contact support")
                                 }
+                                
+                                Divider()
+                                
+                                Button {
+                                    // TODO: Privacy policy
+                                } label: {
+                                    SettingsChevronRow(title: "Privacy policy")
+                                }
+                                
+                                Divider()
+                                
+                                Button {
+                                    // TODO: Terms of service
+                                } label: {
+                                    SettingsChevronRow(title: "Terms of service")
+                                }
                             }
                         }
                     }
@@ -123,12 +164,15 @@ struct SettingsView: View {
                     // MARK: - Log Out
                     Button(role: .destructive) {
                         authManager.logOut()
+                        dismiss()
                     } label: {
                         Text("Log out")
                             .font(KHOITheme.bodyBold)
                             .foregroundColor(KHOIColors.danger)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, KHOITheme.spacing_md)
+                            .background(KHOIColors.cardBackground)
+                            .cornerRadius(KHOITheme.radius_lg)
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     .padding(.top, KHOITheme.spacing_sm)
@@ -137,9 +181,7 @@ struct SettingsView: View {
                 }
             }
         }
-        // When pushed from a NavigationStack, this will show in the nav bar;
-        // the big text at the top visually matches the Figma layout.
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
     }
 }
 
@@ -194,6 +236,7 @@ private struct SettingsValueRow: View {
             Text(value)
                 .font(KHOITheme.body)
                 .foregroundColor(KHOIColors.darkText)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, KHOITheme.spacing_sm)
@@ -214,6 +257,7 @@ private struct SettingsToggleRow: View {
 
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+                .tint(KHOIColors.accentBrown)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, KHOITheme.spacing_sm)

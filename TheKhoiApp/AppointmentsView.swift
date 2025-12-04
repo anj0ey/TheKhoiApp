@@ -17,7 +17,9 @@ struct AppointmentsView: View {
                 
                 VStack(alignment: .leading, spacing: 16) {
                     // Custom title
-                    Text(authManager.isBusinessMode ? "MY SCHEDULE" : "MY BOOKINGS")
+
+                    Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
+
                         .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.mutedText)
                         .tracking(2)
@@ -32,7 +34,7 @@ struct AppointmentsView: View {
                     }
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)   // 🔥 hide the system bar
+            .toolbar(.hidden, for: .navigationBar) 
         }
     }
 }

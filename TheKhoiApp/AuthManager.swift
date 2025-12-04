@@ -14,6 +14,7 @@ import UIKit
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseCore
+import FirebaseStorage
 import CryptoKit
 
 // MARK: - User Profile Model
@@ -24,7 +25,9 @@ struct UserProfile: Codable, Identifiable {
     var email: String
     var username: String
     var bio: String
-    var location: String? // 👈 ADDED THIS
+    var location: String?
+    var profileImageURL: String?
+    var coverImageURL: String?
     
     init(
         id: String,
@@ -32,7 +35,9 @@ struct UserProfile: Codable, Identifiable {
         email: String,
         username: String,
         bio: String,
-        location: String? = nil // 👈 ADDED THIS
+        location: String? = nil,
+        profileImageURL: String? = nil,
+        coverImageURL: String? = nil
     ) {
         self.id = id
         self.fullName = fullName
@@ -40,6 +45,8 @@ struct UserProfile: Codable, Identifiable {
         self.username = username
         self.bio = bio
         self.location = location
+        self.profileImageURL = profileImageURL
+        self.coverImageURL = coverImageURL
     }
 }
 
@@ -49,7 +56,7 @@ final class AuthManager: ObservableObject {
     // Overall flow
     @Published var isOnboardingComplete: Bool = false
     @Published var needsProfileSetup: Bool = false
-    @Published var isCheckingAuth: Bool = true // NEW: Loading state
+    @Published var isCheckingAuth: Bool = true
     
     // From Apple / Google providers
     @Published var authenticatedEmail: String?
@@ -58,8 +65,18 @@ final class AuthManager: ObservableObject {
     // Finished user profile
     @Published var currentUser: UserProfile?
     
-    @Published var isBusinessMode: Bool = UserDefaults.standard.bool(forKey: "isBusinessMode") {
+    // MARK: - Business Profile State
+    /// True only if user has completed business onboarding (has artist document in Firestore)
+    @Published var hasBusinessProfile: Bool = false
+    
+    /// Controls which mode the UI shows. Can only be true if hasBusinessProfile is true.
+    @Published var isBusinessMode: Bool = false {
         didSet {
+            // Only allow business mode if user has a business profile
+            if isBusinessMode && !hasBusinessProfile {
+                isBusinessMode = false
+                return
+            }
             UserDefaults.standard.set(isBusinessMode, forKey: "isBusinessMode")
         }
     }
@@ -72,9 +89,14 @@ final class AuthManager: ObservableObject {
     private let userKey = "currentUserProfile"
     
     func toggleUserMode() {
-            isBusinessMode.toggle()
-            print("🔄 User switched to \(isBusinessMode ? "Business" : "Customer") mode")
+        // Only toggle if user has business profile
+        guard hasBusinessProfile else {
+            print("⚠️ Cannot switch to Business mode: No business profile")
+            return
         }
+        isBusinessMode.toggle()
+        print("🔄 User switched to \(isBusinessMode ? "Business" : "Customer") mode")
+    }
     
     init() {
         // Check if Firebase already has an active session
@@ -91,6 +113,8 @@ final class AuthManager: ObservableObject {
             self.isOnboardingComplete = false
             self.needsProfileSetup = false
             self.currentUser = nil
+            self.hasBusinessProfile = false
+            self.isBusinessMode = false
             self.isCheckingAuth = false
             return
         }
@@ -100,7 +124,7 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                // ❌ Case A: User was deleted in Firebase Console!
+                // User was deleted in Firebase Console
                 print("DEBUG: User token is invalid (User deleted?). Logging out. Error: \(error.localizedDescription)")
                 
                 // Force local sign out to clean up the "Zombie" state
@@ -110,10 +134,12 @@ final class AuthManager: ObservableObject {
                 self.isOnboardingComplete = false
                 self.needsProfileSetup = false
                 self.currentUser = nil
+                self.hasBusinessProfile = false
+                self.isBusinessMode = false
                 self.isCheckingAuth = false
                 
             } else {
-                // ✅ Case B: User is valid on server. Proceed to check Firestore.
+                // User is valid on server. Proceed to check Firestore.
                 print("DEBUG: User is valid. Fetching profile...")
                 self.firebaseUID = user.uid
                 self.authenticatedEmail = user.email
@@ -152,7 +178,7 @@ final class AuthManager: ObservableObject {
         }
     }
     
-    // NEW: Check Firestore for existing profile
+    // MARK: - Check for Existing Profile
     private func checkExistingProfile(uid: String) {
         print("🔍 Checking for existing profile for UID: \(uid)")
         
@@ -161,46 +187,79 @@ final class AuthManager: ObservableObject {
         docRef.getDocument { [weak self] document, error in
             guard let self = self else { return }
             
-            // 1. Handle Errors (Network issues, etc.)
             if let error = error {
                 print("❌ Error fetching profile: \(error.localizedDescription)")
-                // Don't force profile setup on error; just stop loading or show alert
                 self.isCheckingAuth = false
                 return
             }
             
-            // 2. Check if Document Exists
             if let document = document, document.exists {
                 print("✅ Found existing user profile")
                 
-                // Decode the user data
-                do {
-                    // Make sure your UserProfile struct matches the fields in Firestore!
-                    // If fields are missing/renamed, this try? might fail.
-                    let profile = try document.data(as: UserProfile.self)
+                // Manual parsing to handle optional fields gracefully
+                let data = document.data() ?? [:]
+                let profile = UserProfile(
+                    id: data["id"] as? String ?? uid,
+                    fullName: data["fullName"] as? String ?? "",
+                    email: data["email"] as? String ?? "",
+                    username: data["username"] as? String ?? "",
+                    bio: data["bio"] as? String ?? "",
+                    location: data["location"] as? String,
+                    profileImageURL: data["profileImageURL"] as? String,
+                    coverImageURL: data["coverImageURL"] as? String
+                )
+                
+                DispatchQueue.main.async {
+                    self.currentUser = profile
+                    self.isOnboardingComplete = true
+                    self.needsProfileSetup = false
                     
-                    DispatchQueue.main.async {
-                        self.currentUser = profile
-                        self.isOnboardingComplete = true
-                        self.needsProfileSetup = false // CRITICAL: Mark as setup complete
-                        self.isCheckingAuth = false
-                    }
-                } catch {
-                    print("❌ Error decoding user profile: \(error)")
-                    // If decoding fails, we technically have a profile but it's corrupt.
-                    // You might want to let them fix it or contact support.
-                    self.isCheckingAuth = false
+                    // Check for business profile after user profile is loaded
+                    self.checkBusinessProfile(uid: uid)
                 }
             } else {
-                // 3. Document DOES NOT Exist -> Send to Setup
                 print("⚠️ No profile found for this UID. Redirecting to Profile Setup.")
                 DispatchQueue.main.async {
-                    self.needsProfileSetup = true // CRITICAL: This triggers the screen switch
+                    self.needsProfileSetup = true
                     self.isOnboardingComplete = false
+                    self.hasBusinessProfile = false
+                    self.isBusinessMode = false
                     self.isCheckingAuth = false
                 }
             }
         }
+    }
+    
+    // MARK: - Check Business Profile
+    /// Checks if user has an artist document in Firestore (completed business onboarding)
+    private func checkBusinessProfile(uid: String) {
+        print("🔍 Checking for business profile for UID: \(uid)")
+        
+        db.collection("artists").document(uid).getDocument { [weak self] document, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                if let document = document, document.exists {
+                    print("✅ User has a business profile")
+                    self.hasBusinessProfile = true
+                    
+                    // Restore saved business mode preference only if they have a profile
+                    let savedMode = UserDefaults.standard.bool(forKey: "isBusinessMode")
+                    self.isBusinessMode = savedMode
+                } else {
+                    print("ℹ️ User does not have a business profile")
+                    self.hasBusinessProfile = false
+                    self.isBusinessMode = false // Force client mode
+                }
+                
+                self.isCheckingAuth = false
+            }
+        }
+    }
+    
+    // MARK: - Fetch User (called on auth state check)
+    func fetchUser(uid: String) {
+        checkExistingProfile(uid: uid)
     }
     
     func finishProfileSetup(username: String, bio: String, password: String, completion: @escaping (Bool, String?) -> Void) {
@@ -212,7 +271,6 @@ final class AuthManager: ObservableObject {
             return
         }
         
-        // ⚠️ Demo only; password should be managed by FirebaseAuth normally.
         UserDefaults.standard.set(password, forKey: "demoPassword")
         
         let user = UserProfile(
@@ -220,317 +278,230 @@ final class AuthManager: ObservableObject {
             fullName: authenticatedName ?? "",
             email: authenticatedEmail ?? "",
             username: username,
-            bio: bio
+            bio: bio,
+            location: nil,
+            profileImageURL: nil,
+            coverImageURL: nil
         )
         
-        let data: [String: Any] = [
-            "id": uid,
+        db.collection("users").document(uid).setData([
+            "id": user.id,
             "fullName": user.fullName,
-            "fullNameLower": user.fullName.lowercased(),
             "email": user.email,
             "username": user.username,
-            "usernameLower": user.username.lowercased(),
             "bio": user.bio,
-            "createdAt": FieldValue.serverTimestamp(),
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-
-        // First write to Firestore, then save locally
-        db.collection("users").document(uid).setData(data, merge: true) { [weak self] error in
+            "profileImageURL": "",
+            "coverImageURL": ""
+        ]) { [weak self] error in
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Firestore user write error:", error.localizedDescription)
+                print("❌ Firestore write error:", error.localizedDescription)
                 completion(false, "Failed to save profile. Please try again.")
                 return
             }
             
-            print("✅ User profile saved to Firestore")
+            print("✅ Profile saved to Firestore successfully")
             
-            // Now save locally and complete onboarding
             DispatchQueue.main.async {
+                self.currentUser = user
                 self.saveUser(user)
                 self.completeOnboarding()
-                print("✅ Profile setup complete, moving to main app")
                 completion(true, nil)
             }
         }
     }
-
     
-    // MARK: - Sign in with Apple
-    
-    // Store the current nonce for Apple Sign-In
-    private var currentNonce: String?
-    
-    func handleAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
-        request.requestedScopes = [.fullName, .email]
-        
-        // Generate and store nonce
-        let nonce = randomNonceString()
-        currentNonce = nonce
-        request.nonce = sha256(nonce)
-    }
-    
-    func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success(let authorization):
-            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                // Set loading state
-                DispatchQueue.main.async {
-                    self.isCheckingAuth = true
-                }
-                
-                // Apple gives email & name only the first time
-                let email = appleIDCredential.email
-                
-                let formatter = PersonNameComponentsFormatter()
-                let fullName = appleIDCredential.fullName.flatMap { formatter.string(from: $0) }
-                
-                authenticatedEmail = email ?? authenticatedEmail
-                authenticatedName = fullName ?? authenticatedName
-                
-                // Get the identity token
-                guard let identityTokenData = appleIDCredential.identityToken,
-                      let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-                    print("❌ Unable to fetch identity token")
-                    DispatchQueue.main.async {
-                        self.isCheckingAuth = false
-                    }
-                    return
-                }
-                
-                guard let nonce = currentNonce else {
-                    print("❌ Invalid state: A login callback was received, but no login request was sent.")
-                    DispatchQueue.main.async {
-                        self.isCheckingAuth = false
-                    }
-                    return
-                }
-                
-                // Create Firebase credential
-                let credential = OAuthProvider.appleCredential(
-                    withIDToken: identityToken,
-                    rawNonce: nonce,
-                    fullName: appleIDCredential.fullName
-                )
-                
-                // Sign in to Firebase
-                Auth.auth().signIn(with: credential) { [weak self] authResult, error in
-                    guard let self = self else { return }
-                    
-                    if let error = error {
-                        print("❌ Firebase Apple auth error:", error.localizedDescription)
-                        DispatchQueue.main.async {
-                            self.isCheckingAuth = false
-                        }
-                        return
-                    }
-                    
-                    print("✅ Firebase Apple auth success")
-                    guard let uid = authResult?.user.uid else {
-                        print("❌ No Firebase UID returned")
-                        DispatchQueue.main.async {
-                            self.isCheckingAuth = false
-                        }
-                        return
-                    }
-                    
-                    DispatchQueue.main.async {
-                        self.firebaseUID = uid
-                    }
-                    print("firebaseUID:", uid)
-                    
-                    // Check Firestore for existing profile
-                    self.checkExistingProfile(uid: uid)
-                }
-            }
-        case .failure(let error):
-            print("❌ Sign in with Apple failed:", error.localizedDescription)
-        }
-    }
-    
-    // MARK: - Nonce Helpers for Apple Sign-In
-    
-    private func randomNonceString(length: Int = 32) -> String {
-        precondition(length > 0)
-        let charset: [Character] =
-        Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        var result = ""
-        var remainingLength = length
-        
-        while remainingLength > 0 {
-            let randoms: [UInt8] = (0 ..< 16).map { _ in
-                var random: UInt8 = 0
-                let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
-                if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
-                }
-                return random
-            }
-            
-            randoms.forEach { random in
-                if remainingLength == 0 {
-                    return
-                }
-                
-                if random < charset.count {
-                    result.append(charset[Int(random)])
-                    remainingLength -= 1
-                }
-            }
-        }
-        
-        return result
-    }
-    
-    private func sha256(_ input: String) -> String {
-        let inputData = Data(input.utf8)
-        let hashedData = SHA256.hash(data: inputData)
-        let hashString = hashedData.compactMap {
-            String(format: "%02x", $0)
-        }.joined()
-        
-        return hashString
-    }
-    
-    // MARK: - Google Sign In
-    func signInWithGoogle() {
-        guard let rootVC = UIApplication.shared.rootViewController else {
-            print("❌ No root view controller found")
+    // MARK: - Update Profile
+    func updateProfile(
+        fullName: String,
+        username: String,
+        bio: String,
+        location: String,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard let uid = firebaseUID else {
+            completion(false)
             return
         }
         
-        // Set loading state
-        DispatchQueue.main.async {
-            self.isCheckingAuth = true
-        }
-        
-        // Get client ID from Firebase config
-        guard let clientID = FirebaseApp.app()?.options.clientID else {
-            print("❌ No Firebase client ID found")
-            DispatchQueue.main.async {
-                self.isCheckingAuth = false
-            }
-            return
-        }
-        
-        let config = GIDConfiguration(clientID: clientID)
-        GIDSignIn.sharedInstance.configuration = config
-        
-        GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { [weak self] result, error in
+        db.collection("users").document(uid).updateData([
+            "fullName": fullName,
+            "username": username,
+            "bio": bio,
+            "location": location
+        ]) { [weak self] error in
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Google sign in failed:", error.localizedDescription)
+                print("❌ Error updating profile: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                // Update local user
                 DispatchQueue.main.async {
-                    self.isCheckingAuth = false
-                }
-                return
-            }
-            
-            guard let user = result?.user,
-                  let idToken = user.idToken?.tokenString else {
-                print("❌ Missing user or idToken from Google sign-in")
-                DispatchQueue.main.async {
-                    self.isCheckingAuth = false
-                }
-                return
-            }
-            
-            let accessToken = user.accessToken.tokenString
-            
-            // Save display info for your profile flow
-            DispatchQueue.main.async {
-                self.authenticatedEmail = user.profile?.email ?? self.authenticatedEmail
-                self.authenticatedName = user.profile?.name ?? self.authenticatedName
-            }
-            
-            print("📧 Google email:", user.profile?.email ?? "nil")
-            print("👤 Google name:", user.profile?.name ?? "nil")
-            
-            // Create Firebase credential
-            let credential = GoogleAuthProvider.credential(
-                withIDToken: idToken,
-                accessToken: accessToken
-            )
-            
-            Auth.auth().signIn(with: credential) { [weak self] authResult, error in
-                guard let self = self else { return }
-                
-                if let error = error {
-                    print("❌ Firebase Google auth error:", error.localizedDescription)
-                    DispatchQueue.main.async {
-                        self.isCheckingAuth = false
+                    self.currentUser?.fullName = fullName
+                    self.currentUser?.username = username
+                    self.currentUser?.bio = bio
+                    self.currentUser?.location = location
+                    if let user = self.currentUser {
+                        self.saveUser(user)
                     }
-                    return
                 }
-
-                print("✅ Firebase Google auth success")
-                guard let uid = authResult?.user.uid else {
-                    print("❌ No Firebase UID returned")
-                    DispatchQueue.main.async {
-                        self.isCheckingAuth = false
-                    }
-                    return
-                }
-                
-                DispatchQueue.main.async {
-                    self.firebaseUID = uid
-                }
-                print("firebaseUID:", uid)
-
-                // Check Firestore for existing profile
-                self.checkExistingProfile(uid: uid)
+                completion(true)
             }
         }
     }
     
-    // MARK: - Business Profile Creation
+    // MARK: - Upload Profile Image
+    func uploadProfileImage(_ image: UIImage, completion: @escaping (Bool) -> Void) {
+        guard let uid = firebaseUID,
+              let imageData = image.jpegData(compressionQuality: 0.7) else {
+            completion(false)
+            return
+        }
         
-        // PASTE THE FUNCTION HERE 👇
-        func upgradeToBusinessProfile(businessName: String, category: String, city: String, completion: @escaping (Bool) -> Void) {
-            guard let uid = firebaseUID, let user = currentUser else {
+        let storageRef = Storage.storage().reference()
+        let profileImageRef = storageRef.child("profile_images/\(uid).jpg")
+        
+        profileImageRef.putData(imageData, metadata: nil) { [weak self] _, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Error uploading profile image: \(error.localizedDescription)")
                 completion(false)
                 return
             }
             
-            // Ensure db is available (defined at top of class)
-            let db = Firestore.firestore()
-            
-            // 1. Create the Artist Data Object
-            let newArtistData: [String: Any] = [
-                "id": uid,                          // ID matches User ID
-                "ownerId": uid,                     // Link to Auth User
-                "fullName": businessName,           // Business Name
-                "username": user.username,
-                "email": user.email,
-                "city": city,
-                "services": [category],             // e.g. ["Nails"]
-                "claimed": true,                    // Owned by user
-                "createdAt": Timestamp(date: Date()),
-                "rating": 5.0,
-                "reviewCount": 0,
-                "bio": "",
-                "profileImageURL": "",
-                "coverImageURL": ""
-            ]
-            
-            // 2. Save to "artists" collection
-            db.collection("artists").document(uid).setData(newArtistData) { error in
+            profileImageRef.downloadURL { url, error in
                 if let error = error {
-                    print("Error creating business profile: \(error.localizedDescription)")
+                    print("❌ Error getting download URL: \(error.localizedDescription)")
                     completion(false)
-                } else {
-                    // 3. Update Local State
-                    DispatchQueue.main.async {
-                        self.isBusinessMode = true
+                    return
+                }
+                
+                guard let downloadURL = url else {
+                    completion(false)
+                    return
+                }
+                
+                // Update Firestore
+                self.db.collection("users").document(uid).updateData([
+                    "profileImageURL": downloadURL.absoluteString
+                ]) { error in
+                    if let error = error {
+                        print("❌ Error updating profile image URL: \(error.localizedDescription)")
+                        completion(false)
+                    } else {
+                        DispatchQueue.main.async {
+                            self.currentUser?.profileImageURL = downloadURL.absoluteString
+                            if let user = self.currentUser {
+                                self.saveUser(user)
+                            }
+                        }
+                        completion(true)
                     }
-                    completion(true)
                 }
             }
         }
+    }
     
+    // MARK: - Upload Cover Image
+    func uploadCoverImage(_ image: UIImage, completion: @escaping (Bool) -> Void) {
+        guard let uid = firebaseUID,
+              let imageData = image.jpegData(compressionQuality: 0.7) else {
+            completion(false)
+            return
+        }
+        
+        let storageRef = Storage.storage().reference()
+        let coverImageRef = storageRef.child("cover_images/\(uid).jpg")
+        
+        coverImageRef.putData(imageData, metadata: nil) { [weak self] _, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Error uploading cover image: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            coverImageRef.downloadURL { url, error in
+                if let error = error {
+                    print("❌ Error getting download URL: \(error.localizedDescription)")
+                    completion(false)
+                    return
+                }
+                
+                guard let downloadURL = url else {
+                    completion(false)
+                    return
+                }
+                
+                // Update Firestore
+                self.db.collection("users").document(uid).updateData([
+                    "coverImageURL": downloadURL.absoluteString
+                ]) { error in
+                    if let error = error {
+                        print("❌ Error updating cover image URL: \(error.localizedDescription)")
+                        completion(false)
+                    } else {
+                        DispatchQueue.main.async {
+                            self.currentUser?.coverImageURL = downloadURL.absoluteString
+                            if let user = self.currentUser {
+                                self.saveUser(user)
+                            }
+                        }
+                        completion(true)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Upgrade to Business Profile
+    func upgradeToBusinessProfile(businessName: String, category: String, city: String, completion: @escaping (Bool) -> Void) {
+        guard let uid = firebaseUID, let user = currentUser else {
+            completion(false)
+            return
+        }
+        
+        let db = Firestore.firestore()
+        
+        let newArtistData: [String: Any] = [
+            "id": uid,
+            "ownerId": uid,
+            "fullName": businessName,
+            "username": user.username,
+            "email": user.email,
+            "city": city,
+            "services": [category],
+            "claimed": true,
+            "createdAt": Timestamp(date: Date()),
+            "rating": 5.0,
+            "reviewCount": 0,
+            "bio": "",
+            "profileImageURL": user.profileImageURL ?? "",
+            "coverImageURL": user.coverImageURL ?? ""
+        ]
+        
+        db.collection("artists").document(uid).setData(newArtistData) { [weak self] error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("Error creating business profile: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                DispatchQueue.main.async {
+                    // CRITICAL: Set hasBusinessProfile BEFORE isBusinessMode
+                    self.hasBusinessProfile = true
+                    self.isBusinessMode = true
+                }
+                completion(true)
+            }
+        }
+    }
+    
+    // MARK: - Log Out
     func logOut() {
         // 1. Sign out of Firebase
         do {
@@ -550,64 +521,170 @@ final class AuthManager: ObservableObject {
         authenticatedEmail = nil
         authenticatedName = nil
         
-        // 4. Reset onboarding flags
+        // 4. Reset business state
+        hasBusinessProfile = false
+        isBusinessMode = false
+        
+        // 5. Reset state
         isOnboardingComplete = false
         needsProfileSetup = false
-        isCheckingAuth = false
         
-        // 5. Remove stored profile locally
-        UserDefaults.standard.removeObject(forKey: "currentUserProfile")
+        // 6. Clear UserDefaults
+        UserDefaults.standard.removeObject(forKey: userKey)
         UserDefaults.standard.removeObject(forKey: "isOnboardingComplete")
+        UserDefaults.standard.removeObject(forKey: "isBusinessMode")
         
-        print("✅ User logged out successfully")
+        print("🚪 User fully signed out")
     }
     
-    func fetchUser(uid: String) {
-        let db = Firestore.firestore()
+    // MARK: - Apple Sign In
+    
+    /// Called when Apple Sign In button requests authorization
+    func handleAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+    }
+    
+    /// Called when Apple Sign In completes
+    func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            handleAppleSignIn(authorization: authorization, nonce: currentNonce)
+        case .failure(let error):
+            print("❌ Apple Sign In failed: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Store the nonce for Apple Sign In
+    private var currentNonce: String?
+    
+    func handleAppleSignIn(authorization: ASAuthorization, nonce: String?) {
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let nonce = nonce,
+              let appleIDToken = appleIDCredential.identityToken,
+              let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+            print("❌ Unable to get Apple ID Token")
+            return
+        }
         
-        db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idTokenString,
+            rawNonce: nonce,
+            fullName: appleIDCredential.fullName
+        )
+        
+        Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             
-            // 1. Stop the loading animation once we get a response
-            DispatchQueue.main.async {
-                self.isCheckingAuth = false
+            if let error = error {
+                print("❌ Firebase Apple auth error:", error.localizedDescription)
+                return
             }
             
-            // 2. Check if the profile exists in Firestore
-            if let document = snapshot, document.exists {
-                // ✅ Case A: User exists! Load their data and go to RootView.
-                do {
-                    self.currentUser = try document.data(as: UserProfile.self)
-                    self.isOnboardingComplete = true  // <--- KEY FIX: This lets them pass the login screen
-                    self.needsProfileSetup = false
-                } catch {
-                    print("DEBUG: Error decoding user profile: \(error)")
-                    // If data is corrupt, force them to setup again or handle error
-                    self.isOnboardingComplete = false
-                    self.needsProfileSetup = true
+            guard let user = authResult?.user else { return }
+            
+            print("✅ Apple Sign In successful for:", user.email ?? "No email")
+            
+            self.firebaseUID = user.uid
+            self.authenticatedEmail = user.email
+            
+            if let fullName = appleIDCredential.fullName {
+                let name = [fullName.givenName, fullName.familyName]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                self.authenticatedName = name.isEmpty ? nil : name
+            }
+            
+            self.checkExistingProfile(uid: user.uid)
+        }
+    }
+    
+    // MARK: - Google Sign In
+    
+    /// Alias for handleGoogleSignIn (used by OnboardingView)
+    func signInWithGoogle() {
+        handleGoogleSignIn()
+    }
+    
+    func handleGoogleSignIn() {
+        guard let clientID = FirebaseApp.app()?.options.clientID else {
+            print("❌ No Firebase client ID found")
+            return
+        }
+        
+        let config = GIDConfiguration(clientID: clientID)
+        GIDSignIn.sharedInstance.configuration = config
+        
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            print("❌ No root view controller found")
+            return
+        }
+        
+        GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { [weak self] result, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Google Sign In error:", error.localizedDescription)
+                return
+            }
+            
+            guard let user = result?.user,
+                  let idToken = user.idToken?.tokenString else {
+                print("❌ No user or ID token")
+                return
+            }
+            
+            let credential = GoogleAuthProvider.credential(
+                withIDToken: idToken,
+                accessToken: user.accessToken.tokenString
+            )
+            
+            Auth.auth().signIn(with: credential) { [weak self] authResult, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("❌ Firebase Google auth error:", error.localizedDescription)
+                    return
                 }
-            } else {
-                // ⚠️ Case B: User has a login but NO profile. Send to Profile Setup.
-                print("DEBUG: No profile found for \(uid)")
-                self.isOnboardingComplete = false
-                self.needsProfileSetup = true
+                
+                guard let firebaseUser = authResult?.user else { return }
+                
+                print("✅ Google Sign In successful for:", firebaseUser.email ?? "No email")
+                
+                self.firebaseUID = firebaseUser.uid
+                self.authenticatedEmail = firebaseUser.email
+                self.authenticatedName = firebaseUser.displayName
+                
+                self.checkExistingProfile(uid: firebaseUser.uid)
             }
         }
     }
-}
-
-
-// MARK: - Helper to get root view controller
-
-extension UIApplication {
-    var rootViewController: UIViewController? {
-        guard
-            let scene = connectedScenes.first as? UIWindowScene,
-            let window = scene.windows.first,
-            let root = window.rootViewController
-        else {
-            return nil
+    
+    // MARK: - Nonce Generation for Apple Sign In
+    func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
         }
-        return root
+        
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let nonce = randomBytes.map { byte in
+            charset[Int(byte) % charset.count]
+        }
+        return String(nonce)
+    }
+    
+    func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)
+        }.joined()
+        return hashString
     }
 }

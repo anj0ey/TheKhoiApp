@@ -36,7 +36,8 @@ struct CreatePostView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-                    
+                    Spacer()
+
                     // MARK: - Header
                     HStack {
                         Button(action: { dismiss() }) {
@@ -47,9 +48,10 @@ struct CreatePostView: View {
                         
                         Spacer()
                         
-                        Text("New post")
-                            .font(KHOITheme.heading3)
-                            .foregroundColor(KHOIColors.darkText)
+                        Text("NEW POST")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .tracking(2)
                         
                         Spacer()
                         
@@ -77,14 +79,14 @@ struct CreatePostView: View {
                                 RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                                     .fill(KHOIColors.cardBackground)
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 230)
+                                    .frame(height: 253)
                                 
                                 if let image = selectedImage {
                                     Image(uiImage: image)
                                         .resizable()
                                         .scaledToFill()
                                         .frame(maxWidth: .infinity)
-                                        .frame(height: 230)
+                                        .frame(height: 253)
                                         .clipped()
                                         .cornerRadius(KHOITheme.radius_lg)
                                 } else {
@@ -158,7 +160,7 @@ struct CreatePostView: View {
                     
                     // MARK: - Category chips
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
-                        Text("Service category")
+                        Text("Beauty Service")
                             .font(KHOITheme.captionUppercase)
                             .foregroundColor(KHOIColors.mutedText)
                         
