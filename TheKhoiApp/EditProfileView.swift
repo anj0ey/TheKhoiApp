@@ -52,16 +52,15 @@ struct EditProfileView: View {
                 }
             }
         }
-        .navigationTitle("Edit Profile")
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .foregroundColor(KHOIColors.mutedText)
+            ToolbarItem(placement: .principal) {
+                Text("EDIT PROFILE")
+                    .font(KHOITheme.headline)
+                    .foregroundColor(KHOIColors.mutedText)
+                    .tracking(2)
             }
-            
+
+            // Keep your Save button
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Save") {
                     saveProfile()
@@ -71,6 +70,7 @@ struct EditProfileView: View {
                 .disabled(isSaving)
             }
         }
+
         .onAppear {
             loadExistingProfile()
         }
