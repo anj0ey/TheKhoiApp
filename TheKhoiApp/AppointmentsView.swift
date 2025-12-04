@@ -17,15 +17,9 @@ struct AppointmentsView: View {
                 
                 VStack(alignment: .leading, spacing: 16) {
                     // Custom title
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                    Text(authManager.isBusinessMode ? "SCHEDULE" : "BOOKINGS")
-=======
+
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
->>>>>>> Stashed changes
-=======
-                    Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
->>>>>>> Stashed changes
+
                         .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.mutedText)
                         .tracking(2)
@@ -40,7 +34,7 @@ struct AppointmentsView: View {
                     }
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)   // 🔥 hide the system bar
+            .toolbar(.hidden, for: .navigationBar) 
         }
     }
 }

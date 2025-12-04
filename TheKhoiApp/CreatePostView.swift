@@ -36,16 +36,8 @@ struct CreatePostView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                    
                     Spacer()
-=======
-                    Spacer() //move header down a bit
->>>>>>> Stashed changes
-=======
-                    Spacer() //move header down a bit
->>>>>>> Stashed changes
+
                     // MARK: - Header
                     HStack {
                         Button(action: { dismiss() }) {
@@ -56,19 +48,10 @@ struct CreatePostView: View {
                         
                         Spacer()
                         
-<<<<<<< Updated upstream
                         Text("NEW POST")
                             .font(KHOITheme.headline)
                             .foregroundColor(KHOIColors.mutedText)
                             .tracking(2)
-=======
-                        Text("New post")
-                            .font(KHOITheme.headline)
-                            .foregroundColor(KHOIColors.mutedText)
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
                         
                         Spacer()
                         
