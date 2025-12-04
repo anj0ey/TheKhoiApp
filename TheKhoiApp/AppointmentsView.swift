@@ -17,7 +17,11 @@ struct AppointmentsView: View {
                 
                 VStack(alignment: .leading, spacing: 16) {
                     // Custom title
+<<<<<<< Updated upstream
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "BOOKINGS")
+=======
+                    Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
+>>>>>>> Stashed changes
                         .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.mutedText)
                         .tracking(2)
