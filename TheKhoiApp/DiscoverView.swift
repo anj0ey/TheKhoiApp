@@ -16,7 +16,7 @@ struct DiscoverView: View {
     @StateObject private var feedService = FeedService()
     @State private var savedPostIDs: Set<String> = []
 
-    private let categories = ["All", "Skin", "Nail", "Makeup", "Lashes", "Hair", "Brows"]
+    private let categories = ["All", "Skin", "Nails", "Makeup", "Lashes", "Hair", "Brows", "Lash"]
     
     var body: some View {
         NavigationStack {
@@ -58,7 +58,7 @@ struct DiscoverView: View {
             
             TextField("Find your beauty", text: $searchText)
                 .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.darkText)
+                .foregroundColor(KHOIColors.mutedText)
         }
         .padding(.horizontal, KHOITheme.spacing_lg)
         .padding(.vertical, 14)
@@ -159,12 +159,17 @@ struct DiscoverView: View {
     }
     
     private func toggleSave(post: Post) {
-        if savedPostIDs.contains(post.id) {
+        let wasAlreadySaved = savedPostIDs.contains(post.id)
+        
+        if wasAlreadySaved {
             savedPostIDs.remove(post.id)
         } else {
             savedPostIDs.insert(post.id)
         }
         saveSavedPosts()
+        
+        // Update Firestore saveCount
+        feedService.updateSaveCount(postId: post.id, increment: !wasAlreadySaved)
     }
     
     private func loadSavedPosts() {

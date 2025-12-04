@@ -108,6 +108,40 @@ class FeedService: ObservableObject {
             }
     }
     
+    // MARK: - Save Count
+    
+    /// Update the saveCount for a post (increment or decrement)
+    func updateSaveCount(postId: String, increment: Bool) {
+        let postRef = db.collection("posts").document(postId)
+        let change: Int64 = increment ? 1 : -1
+        
+        postRef.updateData([
+            "saveCount": FieldValue.increment(change)
+        ]) { error in
+            if let error = error {
+                print("Error updating save count: \(error.localizedDescription)")
+            } else {
+                // Update local posts array to reflect change immediately
+                if let index = self.posts.firstIndex(where: { $0.id == postId }) {
+                    let newCount = max(0, self.posts[index].saveCount + Int(change))
+                    self.posts[index] = Post(
+                        id: self.posts[index].id,
+                        artistId: self.posts[index].artistId,
+                        artistName: self.posts[index].artistName,
+                        artistHandle: self.posts[index].artistHandle,
+                        artistProfileImageURL: self.posts[index].artistProfileImageURL,
+                        imageURL: self.posts[index].imageURL,
+                        imageHeight: self.posts[index].imageHeight,
+                        tag: self.posts[index].tag,
+                        caption: self.posts[index].caption,
+                        saveCount: newCount,
+                        createdAt: self.posts[index].createdAt
+                    )
+                }
+            }
+        }
+    }
+    
     // MARK: - Uploading
     
     /// Upload an image to Firebase Storage and get the URL

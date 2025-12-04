@@ -27,7 +27,7 @@ struct CreatePostView: View {
     @State private var selectedCategory: String? = nil
     @State private var taggedProvider: String = ""
     
-    private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin"]
+    private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin", "Body", "Lash"]
     
     var body: some View {
         ZStack {
