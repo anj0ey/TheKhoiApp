@@ -17,7 +17,7 @@ struct AppointmentsView: View {
                 
                 VStack(alignment: .leading, spacing: 16) {
                     // Custom title
-                    Text(authManager.isBusinessMode ? "MY SCHEDULE" : "MY BOOKINGS")
+                    Text(authManager.isBusinessMode ? "SCHEDULE" : "BOOKINGS")
                         .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.mutedText)
                         .tracking(2)

@@ -102,8 +102,10 @@ struct DiscoverView: View {
             
             Spacer()
             
-            // CLIENT / PRO Toggle
-            ModeToggle(isBusinessMode: $authManager.isBusinessMode)
+            // CLIENT / PRO Toggle - Only show if user has business profile
+            if authManager.hasBusinessProfile {
+                ModeToggle(isBusinessMode: $authManager.isBusinessMode)
+            }
         }
         .padding(.horizontal, KHOITheme.spacing_md)
         .padding(.top, KHOITheme.spacing_sm)

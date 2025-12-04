@@ -12,6 +12,7 @@ import UIKit // Needed for UIImage
 
 class FeedService: ObservableObject {
     @Published var posts: [Post] = []
+    @Published var userPosts: [Post] = []  // Posts for the current user's profile
     @Published var artists: [Artist] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -76,6 +77,34 @@ class FeedService: ObservableObject {
                 }
                 
                 self.posts = documents.compactMap { Post(document: $0) }
+            }
+    }
+    
+    /// Fetch posts for a specific user (stores in userPosts for profile view)
+    func fetchUserPosts(userId: String) {
+        guard !userId.isEmpty else {
+            userPosts = []
+            return
+        }
+        
+        db.collection("posts")
+            .whereField("artistId", isEqualTo: userId)
+            .order(by: "createdAt", descending: true)
+            .getDocuments { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("Error fetching user posts: \(error.localizedDescription)")
+                    self.userPosts = []
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    self.userPosts = []
+                    return
+                }
+                
+                self.userPosts = documents.compactMap { Post(document: $0) }
             }
     }
     

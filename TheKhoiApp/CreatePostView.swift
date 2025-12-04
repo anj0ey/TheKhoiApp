@@ -37,6 +37,7 @@ struct CreatePostView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
                     
+                    Spacer()
                     // MARK: - Header
                     HStack {
                         Button(action: { dismiss() }) {
@@ -47,9 +48,10 @@ struct CreatePostView: View {
                         
                         Spacer()
                         
-                        Text("New post")
-                            .font(KHOITheme.heading3)
-                            .foregroundColor(KHOIColors.darkText)
+                        Text("NEW POST")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .tracking(2)
                         
                         Spacer()
                         

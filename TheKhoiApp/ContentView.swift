@@ -1026,24 +1026,22 @@ struct RootView: View {
                 Text("") // Dummy View
                     .tabItem {
                         Image(systemName: "plus.circle.fill")
-                        Text("Post")
                     }
                     .tag(2)
             }
             
             // TAB 3: Chats
-            // Note: If Business Mode is OFF, this becomes the 3rd item visually,
-            // but we keep the tag distinct (3) to avoid confusion.
             ChatsView()
                 .tabItem { Label("Chats", systemImage: "message.fill") }
                 .tag(3)
             
-            // TAB 4: Profile
-            ClientProfileView()
+            // TAB 4: Profile (unified view for client and professional)
+            UserProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(4)
         }
         .tint(KHOIColors.accentBrown)
+        .labelStyle(.iconOnly)
         .sheet(isPresented: $showCreatePost) {
             CreatePostView()
                 .environmentObject(authManager)
