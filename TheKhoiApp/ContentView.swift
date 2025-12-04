@@ -47,6 +47,7 @@ struct KHOIColors {
     static let accentBrown = Color(hex: "8B7355")
     static let darkText = Color(hex: "2C2420")
     static let mutedText = Color(hex: "8A827C")
+    static let brandRed = Color(hex:"520000")
     static let cardBackground = Color.white
     static let divider = Color(hex: "E8E3DD")
     static let chipBackground = Color(hex: "EDE8E3")
@@ -590,7 +591,7 @@ struct HomeView: View {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(KHOIColors.mutedText)
                         
-                        TextField("Search people, services...", text: $searchText)
+                        TextField("Find your beauty", text: $searchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .onSubmit { performSearch() }
@@ -1012,7 +1013,7 @@ struct RootView: View {
         )) {
             // TAB 0: Discover
             DiscoverView()
-                .tabItem { Label("Discover", systemImage: "magnifyingglass") }
+                .tabItem { Label("Discover", systemImage: "house") }
                 .tag(0)
             
             // TAB 1: Appointments

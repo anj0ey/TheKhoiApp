@@ -15,17 +15,28 @@ struct AppointmentsView: View {
             ZStack {
                 KHOIColors.background.ignoresSafeArea()
                 
-                if authManager.isBusinessMode {
-                    BusinessScheduleView()
-                } else {
-                    CustomerBookingsView()
+                VStack(alignment: .leading, spacing: 16) {
+                    // Custom title
+                    Text(authManager.isBusinessMode ? "MY SCHEDULE" : "MY BOOKINGS")
+                        .font(KHOITheme.headline)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .tracking(2)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+
+                    // Your actual content
+                    if authManager.isBusinessMode {
+                        BusinessScheduleView()
+                    } else {
+                        CustomerBookingsView()
+                    }
                 }
             }
-            .navigationTitle(authManager.isBusinessMode ? "My Schedule" : "My Bookings")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)   // 🔥 hide the system bar
         }
     }
 }
+
 
 // MARK: - Customer View (My Bookings)
 struct CustomerBookingsView: View {

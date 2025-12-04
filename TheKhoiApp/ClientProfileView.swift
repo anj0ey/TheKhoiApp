@@ -15,7 +15,7 @@ struct ClientProfileView: View {
     
     // UI State
     @State private var selectedTab: ProfileSection = .myPosts
-    @State private var showBusinessSetup = false // 👈 Controls the Onboarding Sheet
+    @State private var showBusinessSetup = false 
 
     enum ProfileSection {
         case myPosts
