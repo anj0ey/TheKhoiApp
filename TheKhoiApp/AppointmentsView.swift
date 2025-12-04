@@ -18,7 +18,11 @@ struct AppointmentsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     // Custom title
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "BOOKINGS")
+=======
+                    Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
+>>>>>>> Stashed changes
 =======
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
 >>>>>>> Stashed changes

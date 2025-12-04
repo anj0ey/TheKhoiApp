@@ -37,8 +37,12 @@ struct CreatePostView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                     
                     Spacer()
+=======
+                    Spacer() //move header down a bit
+>>>>>>> Stashed changes
 =======
                     Spacer() //move header down a bit
 >>>>>>> Stashed changes
@@ -61,6 +65,9 @@ struct CreatePostView: View {
                         Text("New post")
                             .font(KHOITheme.headline)
                             .foregroundColor(KHOIColors.mutedText)
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
                         
                         Spacer()
