@@ -27,7 +27,7 @@ struct CreatePostView: View {
     @State private var selectedCategory: String? = nil
     @State private var taggedProvider: String = ""
     
-    private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin"]
+    private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin", "Body", "Lash"]
     
     var body: some View {
         ZStack {
@@ -239,7 +239,7 @@ struct CreatePostView: View {
                     artistId: uid,
                     artistName: user.fullName,
                     artistHandle: "@\(user.username)",
-                    artistProfileImageURL: nil,
+                    artistProfileImageURL: user.profileImageURL,
                     imageURL: url,
                     imageHeight: 350,
                     tag: selectedCategory ?? "General",
