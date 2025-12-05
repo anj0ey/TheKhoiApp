@@ -17,10 +17,6 @@ struct UserProfileView: View {
     @State private var showSettings = false
     @State private var showBusinessSetup = false
     
-    // For saved posts collection categories
-    @State private var selectedCollection: String = "Your Artists"
-    //private let collections = ["Your Artists", "Nails in SJ", "Makeup Inspo", "Lashes"]
-    
     enum ProfileTab {
         case posts
         case saved
@@ -330,33 +326,13 @@ struct UserProfileView: View {
     // MARK: - Saved Collection Section
     private var savedCollectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            
-            // Collection tabs
-            /*
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(collections, id: \.self) { collection in
-                        Button(action: { selectedCollection = collection }) {
-                            Text(collection)
-                                .font(.system(size: 13, weight: selectedCollection == collection ? .medium : .regular))
-                                .foregroundColor(selectedCollection == collection ? KHOIColors.darkText : KHOIColors.mutedText)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.top, 12)
-            */
-            
-            // Masonry grid of saved posts
-            let savedPosts = feedService.posts.filter { savedPostIDs.contains($0.id) }
-            
-            if savedPosts.isEmpty {
+            if feedService.savedPosts.isEmpty {
                 emptyStateView
             } else {
-                savedMasonryGrid(posts: savedPosts)
+                savedMasonryGrid(posts: feedService.savedPosts)
             }
         }
+        .padding(.top, 12)
     }
     
     private var emptyStateView: some View {
@@ -420,22 +396,25 @@ struct UserProfileView: View {
     }
     
     private func toggleSave(post: Post) {
-        if savedPostIDs.contains(post.id) {
+        guard let userId = authManager.firebaseUID else { return }
+        
+        let wasAlreadySaved = savedPostIDs.contains(post.id)
+        
+        if wasAlreadySaved {
             savedPostIDs.remove(post.id)
         } else {
             savedPostIDs.insert(post.id)
         }
-        saveSavedPosts()
+        
+        // Update Firestore
+        feedService.toggleSavePost(postId: post.id, userId: userId, isSaving: !wasAlreadySaved)
     }
     
     private func loadSavedPosts() {
-        if let array = UserDefaults.standard.array(forKey: "savedPostIDs") as? [String] {
-            savedPostIDs = Set(array)
+        guard let userId = authManager.firebaseUID else { return }
+        feedService.fetchUserSavedPosts(userId: userId) { postIds in
+            self.savedPostIDs = postIds
         }
-    }
-    
-    private func saveSavedPosts() {
-        UserDefaults.standard.set(Array(savedPostIDs), forKey: "savedPostIDs")
     }
 }
 

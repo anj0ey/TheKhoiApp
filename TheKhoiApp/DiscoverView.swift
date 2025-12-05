@@ -16,7 +16,7 @@ struct DiscoverView: View {
     @StateObject private var feedService = FeedService()
     @State private var savedPostIDs: Set<String> = []
 
-    private let categories = ["All", "Skin", "Nail", "Makeup", "Lashes", "Hair", "Brows"]
+    private let categories = ["All", "Skin", "Nails", "Makeup", "Lashes", "Hair", "Brows", "Body"]
     
     var body: some View {
         NavigationStack {
@@ -159,23 +159,27 @@ struct DiscoverView: View {
     }
     
     private func toggleSave(post: Post) {
-        if savedPostIDs.contains(post.id) {
+        guard let userId = authManager.firebaseUID else { return }
+        
+        let wasAlreadySaved = savedPostIDs.contains(post.id)
+        
+        if wasAlreadySaved {
             savedPostIDs.remove(post.id)
         } else {
             savedPostIDs.insert(post.id)
         }
-        saveSavedPosts()
+        
+        // Update Firestore: user's saved posts AND post's saveCount
+        feedService.toggleSavePost(postId: post.id, userId: userId, isSaving: !wasAlreadySaved)
     }
     
     private func loadSavedPosts() {
-        if let array = UserDefaults.standard.array(forKey: "savedPostIDs") as? [String] {
-            savedPostIDs = Set(array)
+        guard let userId = authManager.firebaseUID else { return }
+        feedService.fetchUserSavedPosts(userId: userId) { postIds in
+            self.savedPostIDs = postIds
         }
     }
     
-    private func saveSavedPosts() {
-        UserDefaults.standard.set(Array(savedPostIDs), forKey: "savedPostIDs")
-    }
 }
 
 // MARK: - Mode Toggle (CLIENT / PRO)

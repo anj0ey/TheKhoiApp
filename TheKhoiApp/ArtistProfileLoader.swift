@@ -2,8 +2,6 @@
 //  ArtistProfileLoader.swift
 //  TheKhoiApp
 //
-//  Created by Anjo on 12/2/25.
-//
 
 import SwiftUI
 import FirebaseFirestore
@@ -22,17 +20,15 @@ struct ArtistProfileLoader: View {
                     ProgressView()
                         .tint(KHOIColors.accentBrown)
                 }
-                .onAppear { fetchArtist() }
+                .onAppear { fetchProfile() }
             } else if let artist = artist {
-                // Success: Pass the data to your existing view
                 ArtistProfileView(artist: artist)
             } else {
-                // Failure State
                 VStack(spacing: 12) {
                     Image(systemName: "person.slash")
                         .font(.largeTitle)
                         .foregroundColor(KHOIColors.mutedText)
-                    Text(errorMessage ?? "Artist not found")
+                    Text(errorMessage ?? "Profile not found")
                         .font(KHOITheme.body)
                         .foregroundColor(KHOIColors.mutedText)
                 }
@@ -42,9 +38,30 @@ struct ArtistProfileLoader: View {
         }
     }
     
-    private func fetchArtist() {
+    private func fetchProfile() {
         let db = Firestore.firestore()
+        
+        // First, try to fetch from artists collection
         db.collection("artists").document(artistId).getDocument { snapshot, error in
+            if let document = snapshot, document.exists {
+                // Found in artists collection
+                do {
+                    self.artist = try document.data(as: Artist.self)
+                    self.isLoading = false
+                } catch {
+                    print("Error decoding artist: \(error)")
+                    // Try users collection as fallback
+                    self.fetchFromUsers(db: db)
+                }
+            } else {
+                // Not found in artists, try users collection
+                self.fetchFromUsers(db: db)
+            }
+        }
+    }
+    
+    private func fetchFromUsers(db: Firestore) {
+        db.collection("users").document(artistId).getDocument { snapshot, error in
             isLoading = false
             
             if let error = error {
@@ -52,18 +69,40 @@ struct ArtistProfileLoader: View {
                 return
             }
             
-            guard let document = snapshot, document.exists else {
-                errorMessage = "Artist profile not found."
+            guard let document = snapshot, document.exists, let data = document.data() else {
+                errorMessage = "Profile not found."
                 return
             }
             
-            // Decode directly using Codable
-            do {
-                self.artist = try document.data(as: Artist.self)
-            } catch {
-                print("Error decoding artist: \(error)")
-                errorMessage = "Failed to load artist data."
-            }
+            // Convert user data to Artist object for display
+            let fullName = data["fullName"] as? String ?? "Unknown"
+            let username = data["username"] as? String ?? "user"
+            let bio = data["bio"] as? String ?? ""
+            let profileImageURL = data["profileImageURL"] as? String
+            let coverImageURL = data["coverImageURL"] as? String
+            let location = data["location"] as? String ?? ""
+            
+            self.artist = Artist(
+                id: document.documentID,
+                fullName: fullName,
+                username: username,
+                bio: bio,
+                profileImageURL: profileImageURL,
+                coverImageURL: coverImageURL,
+                services: [],
+                city: location,
+                instagram: nil,
+                website: nil,
+                phoneNumber: nil,
+                claimed: false,
+                claimedBy: nil,
+                claimedAt: nil,
+                featured: false,
+                referralCount: 0,
+                reviewCount: 0,
+                rating: nil,
+                createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+            )
         }
     }
 }
