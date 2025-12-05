@@ -4,11 +4,11 @@
 //
 //  Created by Anjo on 12/2/25.
 //
-
 import SwiftUI
 
 struct AppointmentsView: View {
     @EnvironmentObject var authManager: AuthManager
+    @StateObject private var bookingService = BookingService()
     
     var body: some View {
         NavigationStack {
@@ -16,150 +16,67 @@ struct AppointmentsView: View {
                 KHOIColors.background.ignoresSafeArea()
                 
                 VStack(alignment: .leading, spacing: 16) {
-                    // Custom title
-
+                    // Header
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
-
                         .font(KHOITheme.headline)
                         .foregroundColor(KHOIColors.mutedText)
                         .tracking(2)
                         .padding(.horizontal)
                         .padding(.top, 8)
 
-                    // Your actual content
-                    if authManager.isBusinessMode {
-                        BusinessScheduleView()
+                    // Content
+                    if bookingService.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if bookingService.appointments.isEmpty {
+                        EmptyStateView(isBusiness: authManager.isBusinessMode)
                     } else {
-                        CustomerBookingsView()
-                    }
-                }
-            }
-            .toolbar(.hidden, for: .navigationBar) 
-        }
-    }
-}
-
-
-// MARK: - Customer View (My Bookings)
-struct CustomerBookingsView: View {
-    @State private var selectedTab = "Upcoming"
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Tabs
-            HStack {
-                tabButton(title: "Upcoming")
-                tabButton(title: "Past")
-            }
-            .padding()
-            
-            ScrollView {
-                VStack(spacing: 16) {
-                    if selectedTab == "Upcoming" {
-                        BookingCard(service: "Soft Glam", artist: "Jen Wilson", date: "Nov 14", time: "1:00 PM", status: "Confirmed")
-                        BookingCard(service: "Brow Lamination", artist: "Brows by Sarah", date: "Nov 20", time: "10:00 AM", status: "Pending")
-                    } else {
-                        BookingCard(service: "Full Set Lashes", artist: "Lash Lounge", date: "Oct 01", time: "3:00 PM", status: "Completed")
-                    }
-                }
-                .padding()
-            }
-        }
-    }
-    
-    func tabButton(title: String) -> some View {
-        Button(action: { selectedTab = title }) {
-            Text(title.uppercased())
-                .font(.caption).bold()
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .background(selectedTab == title ? Color.white : Color.clear)
-                .foregroundColor(selectedTab == title ? KHOIColors.darkText : KHOIColors.mutedText)
-                .cornerRadius(12)
-                .shadow(color: selectedTab == title ? Color.black.opacity(0.05) : .clear, radius: 5)
-        }
-    }
-}
-
-// MARK: - Business View (Availability)
-struct BusinessScheduleView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Manage your availability for client bookings.")
-                    .font(KHOITheme.body)
-                    .foregroundColor(KHOIColors.mutedText)
-                    .padding(.horizontal)
-                
-                // Weekly Schedule
-                VStack(spacing: 1) {
-                    ForEach(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], id: \.self) { day in
-                        HStack {
-                            Text(day).bold().frame(width: 40)
-                            Spacer()
-                            Text("9:00 AM - 5:00 PM")
-                                .font(.caption)
-                                .padding(8)
-                                .background(KHOIColors.background)
-                                .cornerRadius(6)
-                            
-                            Toggle("", isOn: .constant(true))
-                                .labelsHidden()
-                                .tint(KHOIColors.accentBrown)
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                ForEach(bookingService.appointments) { appointment in
+                                    AppointmentCard(appointment: appointment, isBusiness: authManager.isBusinessMode)
+                                }
+                            }
+                            .padding()
                         }
-                        .padding()
-                        .background(Color.white)
                     }
                 }
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 5)
-                .padding(.horizontal)
-                
-                Button(action: {}) {
-                    HStack {
-                        Image(systemName: "slider.horizontal.3")
-                        Text("Edit Calendar Settings")
-                    }
-                    .foregroundColor(KHOIColors.darkText)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.white)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(KHOIColors.darkText, lineWidth: 1))
-                }
-                .padding(.horizontal)
             }
-            .padding(.vertical)
+            .onAppear {
+                if let uid = authManager.firebaseUID {
+                    bookingService.fetchAppointments(userID: uid, isBusiness: authManager.isBusinessMode)
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
 
-// Helper Card
-struct BookingCard: View {
-    let service: String
-    let artist: String
-    let date: String
-    let time: String
-    let status: String
+// MARK: - Appointment Card
+struct AppointmentCard: View {
+    let appointment: Appointment
+    let isBusiness: Bool
     
     var statusColor: Color {
-        switch status {
-        case "Confirmed": return .green
-        case "Pending": return .orange
-        case "Completed": return .gray
-        default: return .black
-        }
+        Color(hex: appointment.status.color)
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text(service).font(KHOITheme.headline)
-                    Text("with \(artist)").font(.caption).foregroundColor(KHOIColors.mutedText)
+                    Text(appointment.serviceName)
+                        .font(KHOITheme.headline)
+                    
+                    // If business, show Client Name. If client, show Artist Name.
+                    Text(isBusiness ? "Client: \(appointment.clientName)" : "with \(appointment.artistName)")
+                        .font(.caption)
+                        .foregroundColor(KHOIColors.mutedText)
                 }
+                
                 Spacer()
-                Text(status)
+                
+                Text(appointment.status.rawValue.uppercased())
                     .font(.caption).bold()
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -171,18 +88,27 @@ struct BookingCard: View {
             Divider()
             
             HStack {
-                Label(date, systemImage: "calendar")
+                Label(appointment.dateString, systemImage: "calendar")
                 Spacer()
-                Label(time, systemImage: "clock")
+                Label(appointment.timeString, systemImage: "clock")
             }
             .font(.caption)
             .foregroundColor(KHOIColors.darkText)
             
-            if status == "Confirmed" {
+            // Action Buttons (Only for Confirmed/Pending)
+            if appointment.status == .pending || appointment.status == .confirmed {
                 HStack(spacing: 12) {
-                    Button("Reschedule") {}.font(.caption).bold().foregroundColor(KHOIColors.darkText)
+                    Button("Reschedule") {}
+                        .font(.caption).bold()
+                        .foregroundColor(KHOIColors.darkText)
+                    
                     Spacer()
-                    Button("Message") {}.font(.caption).bold().foregroundColor(KHOIColors.accentBrown)
+                    
+                    Button("Message") {
+                        // Hook up to chat later
+                    }
+                    .font(.caption).bold()
+                    .foregroundColor(KHOIColors.accentBrown)
                 }
                 .padding(.top, 4)
             }
@@ -191,5 +117,26 @@ struct BookingCard: View {
         .background(Color.white)
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.03), radius: 8)
+    }
+}
+
+// MARK: - Empty State
+struct EmptyStateView: View {
+    let isBusiness: Bool
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: isBusiness ? "calendar.badge.exclamationmark" : "calendar.badge.plus")
+                .font(.system(size: 50))
+                .foregroundColor(KHOIColors.mutedText)
+            
+            Text(isBusiness ? "No upcoming appointments" : "You haven't booked anything yet.")
+                .font(KHOITheme.body)
+                .foregroundColor(KHOIColors.mutedText)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 }

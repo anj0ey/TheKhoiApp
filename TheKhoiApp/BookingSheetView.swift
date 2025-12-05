@@ -11,11 +11,14 @@ struct BookingSheetView: View {
     let artist: Artist
     @Binding var isPresented: Bool
     
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var bookingService = BookingService()
+    
     @State private var step = 1
     @State private var selectedService: String?
     @State private var selectedDate: Date = Date()
     @State private var selectedTime: String?
-    
+
     // Mock Data for the prototype
     let timeSlotsMorning = ["10:00 AM", "10:45 AM", "11:15 AM"]
     let timeSlotsAfternoon = ["12:00 PM", "1:15 PM", "3:00 PM", "4:15 PM"]
@@ -297,7 +300,9 @@ struct BookingSheetView: View {
                 }
             }
             
-            bottomButton(title: "Confirm Booking", action: { isPresented = false })
+            bottomButton(title: "Confirm Booking", action: {
+                confirmBooking()
+            })
         }
     }
     
@@ -349,4 +354,44 @@ struct BookingSheetView: View {
         }
         .frame(height: 100)
     }
+    
+    func confirmBooking() {
+            guard let currentUser = authManager.firebaseUID else { return }
+            guard let selectedTime = selectedTime else { return }
+            
+            // 1. Format Date
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd h:mm a"
+            let dateString = "\(formatDate(selectedDate)) \(selectedTime)"
+            let finalDate = dateFormatter.date(from: dateString) ?? Date()
+            
+            // 2. Create Appointment Object
+            let newBooking = Appointment(
+                clientID: currentUser,
+                clientName: authManager.authenticatedName ?? "Unknown Client",
+                artistID: artist.id,
+                artistName: artist.fullName,
+                serviceName: selectedService ?? "General Service",
+                price: 0.0,
+                date: finalDate,
+                status: .pending,
+                createdAt: Date()
+            )
+            
+            // 3. Save to Firebase
+            bookingService.createBooking(appointment: newBooking) { success in
+                if success {
+                    isPresented = false // Close the sheet on success
+                } else {
+                    print("Error saving booking")
+                }
+            }
+        }
+        
+        // Helper for date formatting
+        func formatDate(_ date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: date)
+        }
 }
