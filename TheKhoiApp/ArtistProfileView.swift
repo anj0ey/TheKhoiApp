@@ -2,7 +2,7 @@
 //  ArtistProfileView.swift
 //  TheKhoiApp
 //
-//  Created by Anjo on 12/2/25.
+//  Updated with message button for chat functionality
 //
 
 import SwiftUI
@@ -19,6 +19,17 @@ struct ArtistProfileView: View {
     @State private var selectedTab: String = "Posts"
     @State private var showBookingSheet = false
     @State private var isSaved = false
+    
+    // Chat State
+    @StateObject private var chatService = ChatService()
+    @State private var showChat = false
+    @State private var activeConversation: Conversation?
+    @State private var isCreatingChat = false
+    
+    // Check if this is the current user's own profile
+    private var isOwnProfile: Bool {
+        authManager.firebaseUID == artist.id
+    }
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -46,34 +57,124 @@ struct ArtistProfileView: View {
                             .padding(.top, 40)
                     }
                     
-                    // Spacer for the floating button
-                    Color.clear.frame(height: 100)
+                    // Spacer for the floating buttons
+                    Color.clear.frame(height: 120)
                 }
             }
             
-            // 5. FLOATING BOOK BUTTON
-            VStack {
-                Spacer()
-                Button(action: {
-                    showBookingSheet = true
-                }) {
-                    Text("Book Appointment")
-                        .font(KHOITheme.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(KHOIColors.darkText)
-                        .cornerRadius(16)
-                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-                }
-                .padding(.horizontal, KHOITheme.spacing_md)
-                .padding(.bottom, KHOITheme.spacing_lg)
+            // 5. FLOATING BUTTONS (Message + Book)
+            if !isOwnProfile {
+                floatingButtonsSection
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        // 👇 THIS PRESENTS THE BOOKING SHEET
         .sheet(isPresented: $showBookingSheet) {
             BookingSheetView(artist: artist, isPresented: $showBookingSheet)
+        }
+        .navigationDestination(isPresented: $showChat) {
+            if let conversation = activeConversation,
+               let currentUserId = authManager.firebaseUID {
+                ChatDetailView(
+                    conversation: conversation,
+                    currentUserId: currentUserId,
+                    chatService: chatService
+                )
+            }
+        }
+    }
+    
+    // MARK: - Floating Buttons Section
+    private var floatingButtonsSection: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 12) {
+                // Message Button
+                Button(action: startChat) {
+                    HStack(spacing: 8) {
+                        if isCreatingChat {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 16))
+                        }
+                        Text("Message")
+                            .font(KHOITheme.bodyBold)
+                    }
+                    .foregroundColor(KHOIColors.darkText)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(KHOIColors.cardBackground)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(KHOIColors.divider, lineWidth: 1)
+                    )
+                }
+                .disabled(isCreatingChat)
+                
+                // Book Button
+                Button(action: { showBookingSheet = true }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16))
+                        Text("Book")
+                            .font(KHOITheme.bodyBold)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(KHOIColors.darkText)
+                    .cornerRadius(16)
+                }
+            }
+            .padding(.horizontal, KHOITheme.spacing_md)
+            .padding(.bottom, KHOITheme.spacing_lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: -5)
+        }
+    }
+    
+    // MARK: - Chat Actions
+    private func startChat() {
+        guard let currentUser = authManager.currentUser,
+              let uid = authManager.firebaseUID else { return }
+        
+        // Don't allow chatting with yourself
+        guard uid != artist.id else { return }
+        
+        isCreatingChat = true
+        
+        chatService.getOrCreateConversation(
+            currentUser: (uid: uid, username: currentUser.username, fullName: currentUser.fullName),
+            otherUser: (uid: artist.id, username: artist.username, fullName: artist.fullName),
+            tag: nil
+        ) { result in
+            switch result {
+            case .success(let convId):
+                // Fetch the full conversation object
+                self.fetchConversation(conversationId: convId)
+            case .failure(let error):
+                self.isCreatingChat = false
+                print("Error creating conversation: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func fetchConversation(conversationId: String) {
+        let db = Firestore.firestore()
+        db.collection("conversations").document(conversationId).getDocument { snapshot, error in
+            self.isCreatingChat = false
+            
+            guard let document = snapshot, document.exists,
+                  let conversation = Conversation(document: document) else {
+                print("Error fetching conversation")
+                return
+            }
+            
+            self.activeConversation = conversation
+            self.chatService.listenToMessages(conversationId: conversationId)
+            self.showChat = true
         }
     }
     
@@ -89,7 +190,11 @@ struct ArtistProfileView: View {
                     AsyncImage(url: URL(string: artist.coverImageURL ?? "")) { img in
                         img.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Color.gray.opacity(0.1)
+                        LinearGradient(
+                            colors: [Color(hex: "8B4D5C"), Color(hex: "C4A07C")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     }
                 )
                 .clipped()
@@ -108,9 +213,9 @@ struct ArtistProfileView: View {
                     }
                     .clipShape(Circle())
                 )
-                .offset(x: 20, y: 45) // Push it half out
+                .offset(x: 20, y: 45)
         }
-        .padding(.bottom, 50) // Make room for the avatar
+        .padding(.bottom, 50)
     }
     
     private var infoSection: some View {
@@ -127,15 +232,17 @@ struct ArtistProfileView: View {
                 }
                 Spacer()
                 
-                // Save / Share Buttons
-                HStack(spacing: 12) {
-                    Button(action: { isSaved.toggle() }) {
-                        Image(systemName: isSaved ? "heart.fill" : "heart")
-                            .foregroundColor(isSaved ? KHOIColors.accentBrown : KHOIColors.darkText)
-                            .font(.system(size: 20))
-                            .padding(10)
-                            .background(KHOIColors.cardBackground)
-                            .clipShape(Circle())
+                // Save Button (only show if not own profile)
+                if !isOwnProfile {
+                    HStack(spacing: 12) {
+                        Button(action: { isSaved.toggle() }) {
+                            Image(systemName: isSaved ? "heart.fill" : "heart")
+                                .foregroundColor(isSaved ? KHOIColors.accentBrown : KHOIColors.darkText)
+                                .font(.system(size: 20))
+                                .padding(10)
+                                .background(KHOIColors.cardBackground)
+                                .clipShape(Circle())
+                        }
                     }
                 }
             }
@@ -151,7 +258,9 @@ struct ArtistProfileView: View {
             HStack(spacing: 24) {
                 statItem(value: "\(artist.referralCount)", label: "Referrals")
                 statItem(value: String(format: "%.1f", artist.rating ?? 5.0), label: "Rating")
-                statItem(value: artist.city, label: "Location")
+                if !artist.city.isEmpty {
+                    statItem(value: artist.city, label: "Location")
+                }
             }
             .padding(.top, 8)
         }
@@ -198,7 +307,6 @@ struct ArtistProfileView: View {
     
     private var postsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            // Placeholder posts for now
             ForEach(0..<4, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.gray.opacity(0.1))
@@ -210,30 +318,36 @@ struct ArtistProfileView: View {
     
     private var servicesList: some View {
         VStack(spacing: 16) {
-            ForEach(artist.services, id: \.self) { service in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(service)
-                            .font(KHOITheme.body)
-                            .bold()
-                        Text("1 hr • $80") // Placeholder data
-                            .font(KHOITheme.caption)
-                            .foregroundColor(KHOIColors.mutedText)
+            if artist.services.isEmpty {
+                Text("No services listed yet.")
+                    .foregroundColor(KHOIColors.mutedText)
+                    .padding(.top, 40)
+            } else {
+                ForEach(artist.services, id: \.self) { service in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(service)
+                                .font(KHOITheme.body)
+                                .bold()
+                            Text("1 hr - $80")
+                                .font(KHOITheme.caption)
+                                .foregroundColor(KHOIColors.mutedText)
+                        }
+                        Spacer()
+                        Button("Book") {
+                            showBookingSheet = true
+                        }
+                        .font(KHOITheme.caption.bold())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(KHOIColors.darkText)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                     }
-                    Spacer()
-                    Button("Book") {
-                        showBookingSheet = true
-                    }
-                    .font(KHOITheme.caption.bold())
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(KHOIColors.darkText)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .padding()
+                    .background(KHOIColors.cardBackground)
+                    .cornerRadius(12)
                 }
-                .padding()
-                .background(KHOIColors.cardBackground)
-                .cornerRadius(12)
             }
         }
         .padding(KHOITheme.spacing_md)

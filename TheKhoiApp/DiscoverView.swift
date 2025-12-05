@@ -2,7 +2,7 @@
 //  DiscoverView.swift
 //  TheKhoiApp
 //
-//  Updated to match reference UI design
+//  Updated with working search functionality
 //
 
 import SwiftUI
@@ -12,8 +12,10 @@ struct DiscoverView: View {
     
     // State
     @State private var searchText: String = ""
+    @State private var isSearchFocused: Bool = false
     @State private var selectedCategory: String = "All"
     @StateObject private var feedService = FeedService()
+    @StateObject private var searchService = SearchService()
     @State private var savedPostIDs: Set<String> = []
 
     private let categories = ["All", "Skin", "Nails", "Makeup", "Lashes", "Hair", "Brows", "Body"]
@@ -30,14 +32,19 @@ struct DiscoverView: View {
                         // 1. Search Bar
                         searchBarSection
                         
-                        // 2. Category Filter Pills
-                        categoryPillsSection
-                        
-                        // 3. DISCOVER Header + Toggle
-                        discoverHeaderSection
-                        
-                        // 4. MASONRY GRID
-                        masonryFeedSection
+                        // Show search results OR normal feed
+                        if !searchText.isEmpty {
+                            searchResultsSection
+                        } else {
+                            // 2. Category Filter Pills
+                            categoryPillsSection
+                            
+                            // 3. DISCOVER Header + Toggle
+                            discoverHeaderSection
+                            
+                            // 4. MASONRY GRID
+                            masonryFeedSection
+                        }
                     }
                     .padding(.top, KHOITheme.spacing_sm)
                 }
@@ -45,6 +52,9 @@ struct DiscoverView: View {
             .onAppear {
                 feedService.fetchPosts(category: selectedCategory == "All" ? nil : selectedCategory)
                 loadSavedPosts()
+            }
+            .onChange(of: searchText) { newValue in
+                searchService.search(query: newValue)
             }
         }
     }
@@ -56,15 +66,111 @@ struct DiscoverView: View {
                 .foregroundColor(KHOIColors.mutedText)
                 .font(.system(size: 18))
             
-            TextField("Find your beauty", text: $searchText)
+            TextField("Find your beauty...", text: $searchText)
                 .font(KHOITheme.body)
                 .foregroundColor(KHOIColors.darkText)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            
+            if !searchText.isEmpty {
+                Button(action: {
+                    searchText = ""
+                    searchService.clearResults()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(KHOIColors.mutedText)
+                        .font(.system(size: 16))
+                }
+            }
         }
         .padding(.horizontal, KHOITheme.spacing_lg)
         .padding(.vertical, 14)
         .background(KHOIColors.cardBackground)
         .cornerRadius(KHOITheme.cornerRadius_lg)
         .padding(.horizontal, KHOITheme.spacing_md)
+    }
+    
+    // MARK: - Search Results
+    private var searchResultsSection: some View {
+        VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
+            
+            // Loading indicator
+            if searchService.isSearching {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(KHOIColors.accentBrown)
+                    Spacer()
+                }
+                .padding(.top, 20)
+            }
+            
+            // Users Section
+            if !searchService.userResults.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("USERS")
+                        .font(KHOITheme.captionUppercase)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .padding(.horizontal, KHOITheme.spacing_md)
+                    
+                    ForEach(searchService.userResults) { user in
+                        NavigationLink(destination: ArtistProfileLoader(artistId: user.id)) {
+                            UserSearchRow(user: user)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            
+            // Posts Section
+            if !searchService.postResults.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("POSTS")
+                        .font(KHOITheme.captionUppercase)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .padding(.horizontal, KHOITheme.spacing_md)
+                    
+                    // Grid of post results
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)
+                        ],
+                        spacing: 8
+                    ) {
+                        ForEach(searchService.postResults) { post in
+                            NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
+                                PostSearchTile(post: post)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, KHOITheme.spacing_md)
+                }
+            }
+            
+            // No results
+            if !searchService.isSearching && searchService.userResults.isEmpty && searchService.postResults.isEmpty && !searchText.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 40))
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                    
+                    Text("No results for \"\(searchText)\"")
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                    
+                    Text("Try searching for users or beauty services")
+                        .font(KHOITheme.caption)
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+            }
+            
+            Spacer(minLength: 100)
+        }
     }
     
     // MARK: - Category Pills
@@ -88,7 +194,6 @@ struct DiscoverView: View {
     // MARK: - DISCOVER Header + Toggle
     private var discoverHeaderSection: some View {
         HStack {
-            // DISCOVER label with globe
             HStack(spacing: 8) {
                 Text("DISCOVER")
                     .font(KHOITheme.headline)
@@ -102,7 +207,6 @@ struct DiscoverView: View {
             
             Spacer()
             
-            // CLIENT / PRO Toggle - Only show if user has business profile
             if authManager.hasBusinessProfile {
                 ModeToggle(isBusinessMode: $authManager.isBusinessMode)
             }
@@ -116,7 +220,6 @@ struct DiscoverView: View {
         let columns = splitPosts()
         
         return HStack(alignment: .top, spacing: 12) {
-            // Left Column
             LazyVStack(spacing: 12) {
                 ForEach(columns.left) { post in
                     DiscoverPostCard(
@@ -127,7 +230,6 @@ struct DiscoverView: View {
                 }
             }
             
-            // Right Column
             LazyVStack(spacing: 12) {
                 ForEach(columns.right) { post in
                     DiscoverPostCard(
@@ -139,7 +241,7 @@ struct DiscoverView: View {
             }
         }
         .padding(.horizontal, KHOITheme.spacing_md)
-        .padding(.bottom, 100) // Space for tab bar
+        .padding(.bottom, 100)
     }
     
     // MARK: - Helpers
@@ -169,7 +271,6 @@ struct DiscoverView: View {
             savedPostIDs.insert(post.id)
         }
         
-        // Update Firestore: user's saved posts AND post's saveCount
         feedService.toggleSavePost(postId: post.id, userId: userId, isSaving: !wasAlreadySaved)
     }
     
@@ -179,7 +280,105 @@ struct DiscoverView: View {
             self.savedPostIDs = postIds
         }
     }
+}
+
+// MARK: - User Search Row
+struct UserSearchRow: View {
+    let user: UserSearchResult
     
+    var body: some View {
+        HStack(spacing: 12) {
+            // Profile image
+            if let urlString = user.profileImageURL, let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle().fill(KHOIColors.chipBackground)
+                }
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(KHOIColors.chipBackground)
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(KHOIColors.mutedText)
+                    )
+            }
+            
+            // Name and username
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.fullName)
+                    .font(KHOITheme.bodyBold)
+                    .foregroundColor(KHOIColors.darkText)
+                
+                Text("@\(user.username)")
+                    .font(KHOITheme.caption)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            
+            Spacer()
+            
+            // Artist badge
+            if user.isArtist {
+                Text("PRO")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(KHOIColors.accentBrown)
+                    .cornerRadius(8)
+            }
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundColor(KHOIColors.mutedText)
+        }
+        .padding(.horizontal, KHOITheme.spacing_md)
+        .padding(.vertical, 8)
+        .background(KHOIColors.cardBackground)
+        .cornerRadius(12)
+        .padding(.horizontal, KHOITheme.spacing_md)
+    }
+}
+
+// MARK: - Post Search Tile
+struct PostSearchTile: View {
+    let post: PostSearchResult
+    
+    var body: some View {
+        AsyncImage(url: URL(string: post.imageURL)) { phase in
+            switch phase {
+            case .empty:
+                Rectangle()
+                    .fill(KHOIColors.chipBackground)
+                    .aspectRatio(1, contentMode: .fit)
+            case .success(let image):
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipped()
+            case .failure:
+                Rectangle()
+                    .fill(KHOIColors.chipBackground)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(KHOIColors.mutedText)
+                    )
+            @unknown default:
+                Rectangle()
+                    .fill(KHOIColors.chipBackground)
+                    .aspectRatio(1, contentMode: .fit)
+            }
+        }
+        .cornerRadius(8)
+    }
 }
 
 // MARK: - Mode Toggle (CLIENT / PRO)
@@ -188,7 +387,6 @@ struct ModeToggle: View {
     
     var body: some View {
         HStack(spacing: 0) {
-            // CLIENT
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isBusinessMode = false
@@ -206,7 +404,6 @@ struct ModeToggle: View {
                     )
             }
             
-            // PRO
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isBusinessMode = true
@@ -265,21 +462,14 @@ struct DiscoverPostCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 1. Artist Info Row (Profile pic + Username + Tag)
             artistInfoRow
-            
-            // 2. Post Image
             postImage
-            
-            // 3. Save Count Row
             saveRow
         }
     }
     
-    // MARK: - Artist Info Row
     private var artistInfoRow: some View {
         HStack(spacing: 8) {
-            // Profile Picture
             if let profileURL = post.artistProfileImageURL, let url = URL(string: profileURL) {
                 AsyncImage(url: url) { image in
                     image
@@ -302,7 +492,6 @@ struct DiscoverPostCard: View {
                     )
             }
             
-            // Username
             NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
                 Text(post.artistHandle.replacingOccurrences(of: "@", with: ""))
                     .font(.system(size: 13, weight: .medium))
@@ -312,13 +501,11 @@ struct DiscoverPostCard: View {
             
             Spacer()
             
-            // Tag Badge
             TagBadge(tag: post.tag)
         }
         .padding(.bottom, 8)
     }
     
-    // MARK: - Post Image
     private var postImage: some View {
         NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
             AsyncImage(url: URL(string: post.imageURL)) { phase in
@@ -349,7 +536,6 @@ struct DiscoverPostCard: View {
         .buttonStyle(.plain)
     }
     
-    // MARK: - Save Row
     private var saveRow: some View {
         Button(action: onSaveTap) {
             HStack(spacing: 6) {
@@ -366,7 +552,6 @@ struct DiscoverPostCard: View {
         .buttonStyle(.plain)
     }
     
-    // MARK: - Helpers
     private func formatSaveCount(_ count: Int) -> String {
         if count >= 1000 {
             let k = Double(count) / 1000.0
@@ -382,13 +567,13 @@ struct TagBadge: View {
     
     var tagColor: Color {
         switch tag.lowercased() {
-        case "makeup": return Color(hex: "E8B4B8")  // Pink
-        case "hair": return Color(hex: "B8A9C9")    // Purple
-        case "nails", "nail": return Color(hex: "A8D4A8")  // Green
-        case "lashes", "lash": return Color(hex: "A8C8D4") // Blue
-        case "skin": return Color(hex: "F5CBA7")    // Orange
-        case "brows": return Color(hex: "D4B896")   // Tan
-        case "body": return Color(hex: "C9B99A")    // Brown
+        case "makeup": return Color(hex: "E8B4B8")
+        case "hair": return Color(hex: "B8A9C9")
+        case "nails", "nail": return Color(hex: "A8D4A8")
+        case "lashes", "lash": return Color(hex: "A8C8D4")
+        case "skin": return Color(hex: "F5CBA7")
+        case "brows": return Color(hex: "D4B896")
+        case "body": return Color(hex: "C9B99A")
         default: return KHOIColors.chipBackground
         }
     }

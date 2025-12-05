@@ -18,6 +18,7 @@ struct TheKhoiApp: App {
         WindowGroup {
             ContentView(authManager: authManager)
                 .environmentObject(authManager)
+                .preferredColorScheme(.light)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

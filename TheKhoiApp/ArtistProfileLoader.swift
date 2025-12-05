@@ -2,6 +2,8 @@
 //  ArtistProfileLoader.swift
 //  TheKhoiApp
 //
+//  Loads profile from artists OR users collection
+//
 
 import SwiftUI
 import FirebaseFirestore

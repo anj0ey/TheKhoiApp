@@ -291,7 +291,10 @@ final class AuthManager: ObservableObject {
             "username": user.username,
             "bio": user.bio,
             "profileImageURL": "",
-            "coverImageURL": ""
+            "coverImageURL": "",
+            // Search fields (lowercase for case-insensitive search)
+            "usernameLower": user.username.lowercased(),
+            "fullNameLower": user.fullName.lowercased()
         ]) { [weak self] error in
             guard let self = self else { return }
             
@@ -329,7 +332,10 @@ final class AuthManager: ObservableObject {
             "fullName": fullName,
             "username": username,
             "bio": bio,
-            "location": location
+            "location": location,
+            // Search fields (lowercase for case-insensitive search)
+            "usernameLower": username.lowercased(),
+            "fullNameLower": fullName.lowercased()
         ]) { [weak self] error in
             guard let self = self else { return }
             
