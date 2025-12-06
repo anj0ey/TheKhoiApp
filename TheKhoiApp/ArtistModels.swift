@@ -17,6 +17,7 @@ struct Artist: Identifiable, Codable {
     var profileImageURL: String?
     var coverImageURL: String?      // Cover photo for profile
     var services: [String]          // ["Makeup", "Lashes", "Brows"]
+    var servicesDetailed: [ServiceItem]? // ADDED: Detailed service info
     var city: String
     var instagram: String?
     var website: String?
@@ -47,6 +48,7 @@ struct Artist: Identifiable, Codable {
         profileImageURL: String? = nil,
         coverImageURL: String? = nil,
         services: [String] = [],
+        servicesDetailed: [ServiceItem]? = nil,
         city: String = "",
         instagram: String? = nil,
         website: String? = nil,
@@ -67,6 +69,7 @@ struct Artist: Identifiable, Codable {
         self.profileImageURL = profileImageURL
         self.coverImageURL = coverImageURL
         self.services = services
+        self.servicesDetailed = servicesDetailed
         self.city = city
         self.instagram = instagram
         self.website = website
@@ -132,6 +135,14 @@ extension Artist {
         self.profileImageURL = data["profileImageURL"] as? String
         self.coverImageURL = data["coverImageURL"] as? String
         self.services = data["services"] as? [String] ?? []
+        
+        // ADDED: Parse servicesDetailed
+        if let servicesData = data["servicesDetailed"] as? [[String: Any]] {
+            self.servicesDetailed = servicesData.map { ServiceItem.fromFirestore($0) }
+        } else {
+            self.servicesDetailed = nil
+        }
+        
         self.city = data["city"] as? String ?? ""
         self.instagram = data["instagram"] as? String
         self.website = data["website"] as? String
@@ -165,6 +176,9 @@ extension Artist {
         }
         if let coverImageURL = coverImageURL {
             data["coverImageURL"] = coverImageURL
+        }
+        if let servicesDetailed = servicesDetailed {
+            data["servicesDetailed"] = servicesDetailed.map { $0.toFirestoreData() }
         }
         if let instagram = instagram {
             data["instagram"] = instagram

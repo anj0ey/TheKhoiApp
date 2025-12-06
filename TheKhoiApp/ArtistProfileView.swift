@@ -22,6 +22,7 @@ struct ArtistProfileView: View {
     
     // Chat State
     @StateObject private var chatService = ChatService()
+    @StateObject private var feedService = FeedService()
     @State private var showChat = false
     @State private var activeConversation: Conversation?
     @State private var isCreatingChat = false
@@ -306,48 +307,180 @@ struct ArtistProfileView: View {
     }
     
     private var postsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            ForEach(0..<4, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.1))
-                    .frame(height: 200)
+        Group {
+            if feedService.isLoading {
+                ProgressView()
+                    .padding(.top, 40)
+            } else if feedService.userPosts.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                    Text("No posts yet.")
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 2) {
+                    ForEach(feedService.userPosts) { post in
+                        AsyncImage(url: URL(string: post.imageURL)) { phase in
+                            switch phase {
+                            case .empty:
+                                Rectangle()
+                                    .fill(KHOIColors.chipBackground)
+                                    .aspectRatio(1, contentMode: .fit)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(minWidth: 0, maxWidth: .infinity)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .clipped()
+                            case .failure:
+                                Rectangle()
+                                    .fill(KHOIColors.chipBackground)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay(
+                                        Image(systemName: "photo")
+                                            .foregroundColor(KHOIColors.mutedText)
+                                    )
+                            @unknown default:
+                                Rectangle()
+                                    .fill(KHOIColors.chipBackground)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, KHOITheme.spacing_sm)
             }
         }
-        .padding(KHOITheme.spacing_md)
+        .onAppear {
+            feedService.fetchUserPosts(userId: artist.id)
+        }
     }
     
     private var servicesList: some View {
         VStack(spacing: 16) {
-            if artist.services.isEmpty {
-                Text("No services listed yet.")
-                    .foregroundColor(KHOIColors.mutedText)
-                    .padding(.top, 40)
-            } else {
+            // Check if we have detailed services first
+            if let detailedServices = artist.servicesDetailed, !detailedServices.isEmpty {
+                // Show detailed services with real prices
+                ForEach(detailedServices) { service in
+                    HStack(alignment: .top, spacing: 12) {
+                        // Category color bar
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(hex: ServiceCategories.color(for: service.category)))
+                            .frame(width: 4)
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            // Service name
+                            Text(service.name)
+                                .font(KHOITheme.bodyBold)
+                                .foregroundColor(KHOIColors.darkText)
+                            
+                            // Category badge
+                            Text(service.category.uppercased())
+                                .font(.system(size: 10, weight: .semibold))
+                                .tracking(0.5)
+                                .foregroundColor(KHOIColors.darkText)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(hex: ServiceCategories.color(for: service.category)).opacity(0.3))
+                                .cornerRadius(6)
+                            
+                            // Duration and price
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(KHOIColors.mutedText)
+                                Text("\(service.duration) min")
+                                    .font(KHOITheme.caption)
+                                    .foregroundColor(KHOIColors.mutedText)
+                                
+                                Text("•")
+                                    .foregroundColor(KHOIColors.mutedText)
+                                
+                                Text("$\(Int(service.price))")
+                                    .font(KHOITheme.caption)
+                                    .foregroundColor(KHOIColors.darkText)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            // Description (if exists)
+                            if !service.description.isEmpty {
+                                Text(service.description)
+                                    .font(KHOITheme.caption)
+                                    .foregroundColor(KHOIColors.mutedText)
+                                    .lineLimit(2)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        // Book button
+                        if !isOwnProfile {
+                            Button(action: { showBookingSheet = true }) {
+                                Text("Book")
+                                    .font(KHOITheme.caption.bold())
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(KHOIColors.darkText)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(KHOIColors.cardBackground)
+                    .cornerRadius(12)
+                }
+            }
+            // Fallback to basic services (for older profiles without detailed info)
+            else if !artist.services.isEmpty {
                 ForEach(artist.services, id: \.self) { service in
                     HStack {
                         VStack(alignment: .leading) {
                             Text(service)
                                 .font(KHOITheme.body)
                                 .bold()
-                            Text("1 hr - $80")
+                            Text("Contact for pricing")
                                 .font(KHOITheme.caption)
                                 .foregroundColor(KHOIColors.mutedText)
                         }
                         Spacer()
-                        Button("Book") {
-                            showBookingSheet = true
+                        
+                        if !isOwnProfile {
+                            Button("Book") {
+                                showBookingSheet = true
+                            }
+                            .font(KHOITheme.caption.bold())
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(KHOIColors.darkText)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                         }
-                        .font(KHOITheme.caption.bold())
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(KHOIColors.darkText)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
                     }
                     .padding()
                     .background(KHOIColors.cardBackground)
                     .cornerRadius(12)
                 }
+            }
+            // Empty state
+            else {
+                VStack(spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 40))
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                    
+                    Text("No services listed yet.")
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
             }
         }
         .padding(KHOITheme.spacing_md)

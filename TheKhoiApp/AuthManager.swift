@@ -69,6 +69,9 @@ final class AuthManager: ObservableObject {
     /// True only if user has completed business onboarding (has artist document in Firestore)
     @Published var hasBusinessProfile: Bool = false
     
+    /// True if user has a pending pro application
+    @Published var hasPendingProApplication: Bool = false
+    
     /// Controls which mode the UI shows. Can only be true if hasBusinessProfile is true.
     @Published var isBusinessMode: Bool = false {
         didSet {
@@ -250,6 +253,9 @@ final class AuthManager: ObservableObject {
                     print("ℹ️ User does not have a business profile")
                     self.hasBusinessProfile = false
                     self.isBusinessMode = false // Force client mode
+                    
+                    // Check for pending pro application
+                    self.checkPendingProApplication()
                 }
                 
                 self.isCheckingAuth = false
@@ -390,7 +396,7 @@ final class AuthManager: ObservableObject {
                     return
                 }
                 
-                // Update Firestore
+                // Update Firestore users collection
                 self.db.collection("users").document(uid).updateData([
                     "profileImageURL": downloadURL.absoluteString
                 ]) { error in
@@ -404,6 +410,20 @@ final class AuthManager: ObservableObject {
                                 self.saveUser(user)
                             }
                         }
+                        
+                        // ADDED: Also update artists collection if user has business profile
+                        if self.hasBusinessProfile {
+                            self.db.collection("artists").document(uid).updateData([
+                                "profileImageURL": downloadURL.absoluteString
+                            ]) { error in
+                                if let error = error {
+                                    print("❌ Error updating artist profile image: \(error.localizedDescription)")
+                                } else {
+                                    print("✅ Artist profile image updated")
+                                }
+                            }
+                        }
+                        
                         completion(true)
                     }
                 }
@@ -443,7 +463,7 @@ final class AuthManager: ObservableObject {
                     return
                 }
                 
-                // Update Firestore
+                // Update Firestore users collection
                 self.db.collection("users").document(uid).updateData([
                     "coverImageURL": downloadURL.absoluteString
                 ]) { error in
@@ -457,6 +477,20 @@ final class AuthManager: ObservableObject {
                                 self.saveUser(user)
                             }
                         }
+                        
+                        // ADDED: Also update artists collection if user has business profile
+                        if self.hasBusinessProfile {
+                            self.db.collection("artists").document(uid).updateData([
+                                "coverImageURL": downloadURL.absoluteString
+                            ]) { error in
+                                if let error = error {
+                                    print("❌ Error updating artist cover image: \(error.localizedDescription)")
+                                } else {
+                                    print("✅ Artist cover image updated")
+                                }
+                            }
+                        }
+                        
                         completion(true)
                     }
                 }
@@ -507,6 +541,92 @@ final class AuthManager: ObservableObject {
         }
     }
     
+    // MARK: - Pro Application Status
+    
+    /// Set pending pro application status
+    func setPendingProStatus(_ isPending: Bool) {
+        DispatchQueue.main.async {
+            self.hasPendingProApplication = isPending
+            UserDefaults.standard.set(isPending, forKey: "hasPendingProApplication")
+        }
+    }
+    
+    /// Check if user has a pending pro application
+    func checkPendingProApplication() {
+        guard let uid = firebaseUID else { return }
+        
+        db.collection("pro_applications").document(uid).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
+            
+            if let document = snapshot, document.exists {
+                let status = document.data()?["status"] as? String ?? ""
+                DispatchQueue.main.async {
+                    self.hasPendingProApplication = (status == "pending")
+                    
+                    // If approved, upgrade to business profile
+                    if status == "approved" && !self.hasBusinessProfile {
+                        self.upgradeFromApprovedApplication(document: document)
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.hasPendingProApplication = false
+                }
+            }
+        }
+    }
+    
+    /// Upgrade user to business profile from approved application
+    private func upgradeFromApprovedApplication(document: DocumentSnapshot) {
+        guard let uid = firebaseUID,
+              let user = currentUser,
+              let data = document.data() else { return }
+        
+        let businessName = data["businessName"] as? String ?? user.fullName
+        let location = data["location"] as? String ?? ""
+        let bio = data["bio"] as? String ?? ""
+        let servicesData = data["services"] as? [[String: Any]] ?? []
+        let services = servicesData.map { $0["category"] as? String ?? "" }.filter { !$0.isEmpty }
+        let policiesData = data["policies"] as? [String: Any]
+        let portfolioData = data["portfolioImages"] as? [[String: Any]] ?? []
+        
+        var artistData: [String: Any] = [
+            "id": uid,
+            "ownerId": uid,
+            "fullName": businessName,
+            "username": user.username,
+            "email": user.email,
+            "city": location,
+            "bio": bio,
+            "services": services,
+            "servicesDetailed": servicesData,
+            "claimed": true,
+            "verified": true,
+            "createdAt": Timestamp(date: Date()),
+            "rating": 5.0,
+            "reviewCount": 0,
+            "profileImageURL": user.profileImageURL ?? "",
+            "coverImageURL": user.coverImageURL ?? "",
+            "portfolioImages": portfolioData
+        ]
+        
+        if let policies = policiesData {
+            artistData["policies"] = policies
+        }
+        
+        db.collection("artists").document(uid).setData(artistData) { [weak self] error in
+            guard let self = self else { return }
+            
+            if error == nil {
+                DispatchQueue.main.async {
+                    self.hasBusinessProfile = true
+                    self.hasPendingProApplication = false
+                    self.isBusinessMode = true
+                }
+            }
+        }
+    }
+    
     // MARK: - Log Out
     func logOut() {
         // 1. Sign out of Firebase
@@ -530,6 +650,7 @@ final class AuthManager: ObservableObject {
         // 4. Reset business state
         hasBusinessProfile = false
         isBusinessMode = false
+        hasPendingProApplication = false
         
         // 5. Reset state
         isOnboardingComplete = false
@@ -539,6 +660,7 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: userKey)
         UserDefaults.standard.removeObject(forKey: "isOnboardingComplete")
         UserDefaults.standard.removeObject(forKey: "isBusinessMode")
+        UserDefaults.standard.removeObject(forKey: "hasPendingProApplication")
         
         print("🚪 User fully signed out")
     }

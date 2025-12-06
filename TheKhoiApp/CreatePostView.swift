@@ -2,7 +2,6 @@
 //  CreatePostView.swift
 //  TheKhoiApp
 //
-//  Created by Paige McNamara-Pittler on 12/2/25.
 //
 
 import SwiftUI
@@ -25,7 +24,7 @@ struct CreatePostView: View {
     // Form values
     @State private var caption: String = ""
     @State private var selectedCategory: String? = nil
-    @State private var taggedProvider: String = ""
+    @State private var location: String = ""
     
     private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin", "Body", "Lash"]
     
@@ -63,12 +62,12 @@ struct CreatePostView: View {
                                     .foregroundColor(canShare ? KHOIColors.accentBrown : Color.gray)
                             }
                         }
-                        .disabled(!canShare || isUploading) // Disable button if empty OR if busy
+                        .disabled(!canShare || isUploading)
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     .padding(.top, KHOITheme.spacing_md)
                     
-                    // MARK: - Image picker card
+                    // MARK: - Image picker card (TALLER)
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_sm) {
                         Text("Photo")
                             .font(KHOITheme.captionUppercase)
@@ -79,20 +78,19 @@ struct CreatePostView: View {
                                 RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                                     .fill(KHOIColors.cardBackground)
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 253)
+                                    .frame(height: 400) // INCREASED from 253
                                 
                                 if let image = selectedImage {
                                     Image(uiImage: image)
                                         .resizable()
-                                        .scaledToFill()
+                                        .scaledToFit()
                                         .frame(maxWidth: .infinity)
-                                        .frame(height: 253)
-                                        .clipped()
+                                        .frame(height: 400)
                                         .cornerRadius(KHOITheme.radius_lg)
                                 } else {
                                     VStack(spacing: KHOITheme.spacing_sm) {
                                         Image(systemName: "photo.on.rectangle.angled")
-                                            .font(.system(size: 32))
+                                            .font(.system(size: 48)) // Larger icon
                                             .foregroundColor(KHOIColors.mutedText)
                                         Text("Tap to add a photo")
                                             .font(KHOITheme.body)
@@ -104,61 +102,7 @@ struct CreatePostView: View {
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // MARK: - Caption
-                    VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
-                        Text("Caption")
-                            .font(KHOITheme.captionUppercase)
-                            .foregroundColor(KHOIColors.mutedText)
-                        
-                        ZStack(alignment: .topLeading) {
-                            RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
-                                .fill(KHOIColors.cardBackground)
-                            
-                            TextEditor(text: $caption)
-                                .font(KHOITheme.body)
-                                .padding(.horizontal, KHOITheme.spacing_md)
-                                .padding(.vertical, KHOITheme.spacing_sm)
-                                .frame(minHeight: 100, alignment: .topLeading)
-                            
-                            if caption.isEmpty {
-                                Text("Write a caption…")
-                                    .font(KHOITheme.body)
-                                    .foregroundColor(KHOIColors.mutedText)
-                                    .padding(.horizontal, KHOITheme.spacing_md + 2)
-                                    .padding(.vertical, KHOITheme.spacing_sm + 3)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal, KHOITheme.spacing_md)
-                    
-                    // MARK: - Tag provider
-                    VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
-                        Text("Tag provider")
-                            .font(KHOITheme.captionUppercase)
-                            .foregroundColor(KHOIColors.mutedText)
-                        
-                        RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
-                            .fill(KHOIColors.cardBackground)
-                            .overlay(
-                                HStack {
-                                    Image(systemName: "magnifyingglass")
-                                        .foregroundColor(KHOIColors.mutedText)
-                                    
-                                    TextField("Search provider", text: $taggedProvider)
-                                        .font(KHOITheme.body)
-                                        .autocorrectionDisabled()
-                                    
-                                    Spacer()
-                                }
-                                    .padding(.horizontal, KHOITheme.spacing_md)
-                                    .padding(.vertical, KHOITheme.spacing_sm)
-                            )
-                            .frame(height: 48)
-                    }
-                    .padding(.horizontal, KHOITheme.spacing_md)
-                    
-                    // MARK: - Category chips
+                    // MARK: - Category chips (MOVED UP - before caption)
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Beauty Service")
                             .font(KHOITheme.captionUppercase)
@@ -194,6 +138,71 @@ struct CreatePostView: View {
                             }
                             .padding(.horizontal, KHOITheme.spacing_md)
                         }
+                    }
+                    .padding(.horizontal, KHOITheme.spacing_md)
+                    
+                    // MARK: - Caption (NOW BELOW beauty service)
+                    VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
+                        Text("Caption")
+                            .font(KHOITheme.captionUppercase)
+                            .foregroundColor(KHOIColors.mutedText)
+                        
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
+                                .fill(KHOIColors.cardBackground)
+                            
+                            TextEditor(text: $caption)
+                                .font(KHOITheme.body)
+                                .padding(.horizontal, KHOITheme.spacing_md)
+                                .padding(.vertical, KHOITheme.spacing_sm)
+                                .frame(minHeight: 100, alignment: .topLeading)
+                                .scrollContentBackground(.hidden)
+                            
+                            if caption.isEmpty {
+                                Text("Write a caption…")
+                                    .font(KHOITheme.body)
+                                    .foregroundColor(KHOIColors.mutedText)
+                                    .padding(.horizontal, KHOITheme.spacing_md + 2)
+                                    .padding(.vertical, KHOITheme.spacing_sm + 3)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding(.horizontal, KHOITheme.spacing_md)
+                    
+                    // MARK: - Location (NEW)
+                    VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
+                        Text("Location")
+                            .font(KHOITheme.captionUppercase)
+                            .foregroundColor(KHOIColors.mutedText)
+                        
+                        RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
+                            .fill(KHOIColors.cardBackground)
+                            .overlay(
+                                HStack {
+                                    Image(systemName: "location.fill")
+                                        .foregroundColor(KHOIColors.mutedText)
+                                        .font(.system(size: 14))
+                                    
+                                    TextField("Add location (optional)", text: $location)
+                                        .font(KHOITheme.body)
+                                        .autocorrectionDisabled()
+                                    
+                                    Spacer()
+                                    
+                                    // Clear button
+                                    if !location.isEmpty {
+                                        Button(action: { location = "" }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(KHOIColors.mutedText)
+                                                .font(.system(size: 16))
+                                        }
+                                    }
+                                }
+                                    .padding(.horizontal, KHOITheme.spacing_md)
+                                    .padding(.vertical, KHOITheme.spacing_sm)
+                            )
+                            .frame(height: 48)
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
@@ -233,7 +242,7 @@ struct CreatePostView: View {
             switch result {
             case .success(let url):
                 
-                // 2. Create Post (FIXED: Added UUID for id)
+                // 2. Create Post with location
                 let newPost = Post(
                     id: UUID().uuidString,
                     artistId: uid,
@@ -248,7 +257,7 @@ struct CreatePostView: View {
                     createdAt: Date()
                 )
                 
-                // 3. Upload Post (FIXED: Handling Result<String, Error>)
+                // 3. Upload Post
                 feedService.uploadPost(newPost) { result in
                     isUploading = false
                     switch result {
@@ -264,10 +273,12 @@ struct CreatePostView: View {
                 print("Image upload failed: \(error)")
             }
         }
-    }}
+    }
+}
 
 #Preview {
     NavigationStack {
         CreatePostView()
+            .environmentObject(AuthManager())
     }
 }

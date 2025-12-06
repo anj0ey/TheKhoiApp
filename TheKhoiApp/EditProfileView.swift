@@ -2,7 +2,6 @@
 //  EditProfileView.swift
 //  TheKhoiApp
 //
-//  Edit profile with image upload support
 //
 
 import SwiftUI
@@ -24,10 +23,17 @@ struct EditProfileView: View {
     @State private var profileImage: UIImage? = nil
     @State private var coverImage: UIImage? = nil
     
+    // Cropper states
+    @State private var showProfileCropper = false
+    @State private var showCoverCropper = false
+    @State private var tempProfileImage: UIImage? = nil
+    @State private var tempCoverImage: UIImage? = nil
+    
     // Loading states
     @State private var isSaving = false
     @State private var isUploadingProfile = false
     @State private var isUploadingCover = false
+    @State private var isLoadingImage = false
     
     var body: some View {
         ZStack {
@@ -51,6 +57,21 @@ struct EditProfileView: View {
                     Spacer(minLength: 40)
                 }
             }
+            
+            // Loading overlay
+            if isLoadingImage {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.5)
+                        Text("Loading image...")
+                            .font(KHOITheme.body)
+                            .foregroundColor(.white)
+                    }
+                }
+            }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -60,7 +81,6 @@ struct EditProfileView: View {
                     .tracking(2)
             }
 
-            // Keep your Save button
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Save") {
                     saveProfile()
@@ -70,27 +90,111 @@ struct EditProfileView: View {
                 .disabled(isSaving)
             }
         }
-
         .onAppear {
             loadExistingProfile()
         }
         .onChange(of: selectedProfileItem) { _, newItem in
             Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let uiImage = UIImage(data: data) {
-                    profileImage = uiImage
-                    uploadProfileImage(uiImage)
+                if let newItem = newItem {
+                    isLoadingImage = true
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let originalImage = UIImage(data: data) {
+                        // Resize BEFORE showing cropper
+                        let resized = await Task.detached(priority: .userInitiated) {
+                            return resizeImage(originalImage, maxDimension: 1500)
+                        }.value
+                        
+                        await MainActor.run {
+                            tempProfileImage = resized
+                            isLoadingImage = false
+                            showProfileCropper = true
+                        }
+                    } else {
+                        await MainActor.run {
+                            isLoadingImage = false
+                        }
+                    }
                 }
             }
         }
         .onChange(of: selectedCoverItem) { _, newItem in
             Task {
+                isLoadingImage = true
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let uiImage = UIImage(data: data) {
-                    coverImage = uiImage
-                    uploadCoverImage(uiImage)
+                   let originalImage = UIImage(data: data) {
+                    // Resize BEFORE showing cropper for better performance
+                    let resized = resizeImage(originalImage, maxDimension: 1500)
+                    await MainActor.run {
+                        tempCoverImage = resized
+                        isLoadingImage = false
+                        showCoverCropper = true
+                    }
+                } else {
+                    await MainActor.run {
+                        isLoadingImage = false
+                    }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showProfileCropper) {
+            if let image = tempProfileImage {
+                ImageCropperView(
+                    image: image,
+                    aspectRatio: 1.0,
+                    onCrop: { croppedImage in
+                        profileImage = croppedImage
+                        uploadProfileImage(croppedImage)
+                        showProfileCropper = false
+                        tempProfileImage = nil
+                        selectedProfileItem = nil
+                    },
+                    onCancel: {
+                        showProfileCropper = false
+                        tempProfileImage = nil
+                        selectedProfileItem = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+        }
+        .fullScreenCover(isPresented: $showCoverCropper) {
+            if let image = tempCoverImage {
+                ImageCropperView(
+                    image: image,
+                    aspectRatio: 3.0,
+                    onCrop: { croppedImage in
+                        coverImage = croppedImage
+                        uploadCoverImage(croppedImage)
+                        showCoverCropper = false
+                        tempCoverImage = nil
+                        selectedCoverItem = nil
+                    },
+                    onCancel: {
+                        showCoverCropper = false
+                        tempCoverImage = nil
+                        selectedCoverItem = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+        }
+    }
+    
+    // MARK: - Helper: Resize Image
+    private func resizeImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let maxSize = max(size.width, size.height)
+        
+        if maxSize <= maxDimension {
+            return image
+        }
+        
+        let scale = maxDimension / maxSize
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
     
@@ -101,7 +205,7 @@ struct EditProfileView: View {
             if let coverImage = coverImage {
                 Image(uiImage: coverImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
                     .frame(height: 160)
                     .clipped()
             } else if let coverURL = authManager.currentUser?.coverImageURL,
@@ -109,7 +213,7 @@ struct EditProfileView: View {
                 AsyncImage(url: url) { image in
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                 } placeholder: {
                     defaultCoverGradient
                 }
@@ -137,7 +241,7 @@ struct EditProfileView: View {
                     .clipShape(Circle())
             }
             .padding(12)
-            .disabled(isUploadingCover)
+            .disabled(isUploadingCover || isLoadingImage)
         }
     }
     
@@ -196,7 +300,7 @@ struct EditProfileView: View {
                     .clipShape(Circle())
             }
             .offset(x: 35, y: 35)
-            .disabled(isUploadingProfile)
+            .disabled(isUploadingProfile || isLoadingImage)
         }
     }
     
@@ -214,17 +318,10 @@ struct EditProfileView: View {
     // MARK: - Form Fields Section
     private var formFieldsSection: some View {
         VStack(spacing: KHOITheme.spacing_md) {
-            // Display Name
             EditProfileField(title: "Display name", text: $displayName)
-            
-            // Username
             EditProfileField(title: "Username", text: $username)
                 .textInputAutocapitalization(.never)
-            
-            // Bio
             EditProfileField(title: "Bio", text: $bio, isMultiline: true)
-            
-            // Location
             EditProfileField(title: "Location", text: $location)
         }
         .padding(.horizontal, KHOITheme.spacing_md)
@@ -277,6 +374,226 @@ struct EditProfileView: View {
     }
 }
 
+// MARK: - Optimized Image Cropper View
+struct ImageCropperView: View {
+    let image: UIImage
+    let aspectRatio: CGFloat
+    let onCrop: (UIImage) -> Void
+    let onCancel: () -> Void
+    
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    
+    // Store the UIImage representation to avoid recreating it
+    @State private var displayImage: Image?
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header
+                headerView
+                
+                // Crop area
+                GeometryReader { cropGeometry in
+                    ZStack {
+                        // Dimmed overlay
+                        Color.black.opacity(0.5)
+                        
+                        // Calculate crop dimensions
+                        let cropWidth = cropGeometry.size.width - 40
+                        let cropHeight = cropWidth / aspectRatio
+                        
+                        // Image - Use cached Image view
+                        Group {
+                            if let displayImage = displayImage {
+                                displayImage
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } else {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            }
+                        }
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let delta = value / lastScale
+                                    lastScale = value
+                                    scale = min(max(scale * delta, 1.0), 4.0)
+                                }
+                                .onEnded { _ in
+                                    lastScale = 1.0
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    offset = CGSize(
+                                        width: lastOffset.width + value.translation.width,
+                                        height: lastOffset.height + value.translation.height
+                                    )
+                                }
+                                .onEnded { _ in
+                                    lastOffset = offset
+                                }
+                        )
+                        
+                        // Crop frame overlay
+                        Rectangle()
+                            .strokeBorder(Color.white, lineWidth: 2)
+                            .frame(width: cropWidth, height: cropHeight)
+                            .allowsHitTesting(false)
+                        
+                        // Corner handles
+                        VStack {
+                            HStack {
+                                cornerHandle()
+                                Spacer()
+                                cornerHandle()
+                            }
+                            Spacer()
+                            HStack {
+                                cornerHandle()
+                                Spacer()
+                                cornerHandle()
+                            }
+                        }
+                        .frame(width: cropWidth, height: cropHeight)
+                        .allowsHitTesting(false)
+                    }
+                }
+                
+                // Instructions
+                footerView
+            }
+        }
+        .onAppear {
+            // Cache the Image view once on appear
+            displayImage = Image(uiImage: image)
+        }
+    }
+    
+    private var headerView: some View {
+        HStack {
+            Button("Cancel") {
+                onCancel()
+            }
+            .font(KHOITheme.body)
+            .foregroundColor(.white)
+            
+            Spacer()
+            
+            Text("Adjust Photo")
+                .font(KHOITheme.headline)
+                .foregroundColor(.white)
+            
+            Spacer()
+            
+            Button("Done") {
+                cropImage()
+            }
+            .font(KHOITheme.bodyBold)
+            .foregroundColor(KHOIColors.accentBrown)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 70)
+        .padding(.bottom, 16)
+        .background(Color.black)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var footerView: some View {
+        Text("Pinch to zoom • Drag to reposition")
+            .font(KHOITheme.caption)
+            .foregroundColor(.white.opacity(0.7))
+            .padding(.vertical, 20)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+    }
+    
+    private func cornerHandle() -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.white)
+            .frame(width: 20, height: 20)
+    }
+    
+    private func cropImage() {
+        // Use a rendering-based approach for more accurate cropping
+        let screenWidth = UIScreen.main.bounds.width
+        let cropWidth = screenWidth - 40
+        let cropHeight = cropWidth / aspectRatio
+        
+        // Final output size
+        let outputSize = CGSize(width: 1200, height: 1200 / aspectRatio)
+        
+        // Create a renderer with the output size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
+        
+        let croppedImage = renderer.image { context in
+            // Calculate how the image is displayed in the crop area
+            let imageSize = image.size
+            let imageAspect = imageSize.width / imageSize.height
+            let cropAspect = cropWidth / cropHeight
+            
+            // Determine the displayed image size
+            var displayedWidth: CGFloat
+            var displayedHeight: CGFloat
+            
+            if imageAspect > cropAspect {
+                // Image is wider than crop area
+                displayedHeight = cropHeight
+                displayedWidth = displayedHeight * imageAspect
+            } else {
+                // Image is taller than crop area
+                displayedWidth = cropWidth
+                displayedHeight = displayedWidth / imageAspect
+            }
+            
+            // Apply scale
+            displayedWidth *= scale
+            displayedHeight *= scale
+            
+            // Calculate the draw position (centered, then offset by user's pan)
+            let drawX = (cropWidth - displayedWidth) / 2 + offset.width
+            let drawY = (cropHeight - displayedHeight) / 2 + offset.height
+            
+            // Scale to output size
+            let scaleToOutput = outputSize.width / cropWidth
+            let finalDrawRect = CGRect(
+                x: drawX * scaleToOutput,
+                y: drawY * scaleToOutput,
+                width: displayedWidth * scaleToOutput,
+                height: displayedHeight * scaleToOutput
+            )
+            
+            // Draw the image
+            image.draw(in: finalDrawRect)
+        }
+        
+        onCrop(croppedImage)
+    }
+    
+    private func resizeImage(_ image: UIImage, to size: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+}
+
 // MARK: - Edit Profile Field Component
 struct EditProfileField: View {
     let title: String
@@ -297,6 +614,7 @@ struct EditProfileField: View {
                     .padding(12)
                     .background(KHOIColors.cardBackground)
                     .cornerRadius(KHOITheme.radius_lg)
+                    .scrollContentBackground(.hidden)
             } else {
                 TextField("", text: $text)
                     .font(KHOITheme.body)

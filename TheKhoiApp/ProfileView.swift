@@ -15,7 +15,7 @@ struct UserProfileView: View {
     @State private var selectedTab: ProfileTab = .posts
     @State private var savedPostIDs: Set<String> = []
     @State private var showSettings = false
-    @State private var showBusinessSetup = false
+    @State private var showProOnboarding = false // CHANGED: Use ProOnboardingView
     
     enum ProfileTab {
         case posts
@@ -36,9 +36,9 @@ struct UserProfileView: View {
                         // User info section
                         userInfoSection
                         
-                        // Business setup card (only for non-professionals)
+                        // UPDATED: Pro application card (only for non-professionals)
                         if !authManager.hasBusinessProfile {
-                            businessSetupCard
+                            proApplicationCard
                         }
                         
                         // Tab selector
@@ -56,8 +56,8 @@ struct UserProfileView: View {
                         .environmentObject(authManager)
                 }
             }
-            .sheet(isPresented: $showBusinessSetup) {
-                BusinessOnboardingView()
+            .sheet(isPresented: $showProOnboarding) {
+                ProOnboardingView()
                     .environmentObject(authManager)
             }
             .onAppear {
@@ -67,6 +67,11 @@ struct UserProfileView: View {
                     feedService.fetchUserPosts(userId: authManager.firebaseUID ?? "")
                 }
                 feedService.fetchPosts()
+                
+                // ADDED: Check for pending application
+                if !authManager.hasBusinessProfile {
+                    authManager.checkPendingProApplication()
+                }
             }
         }
     }
@@ -80,7 +85,7 @@ struct UserProfileView: View {
                 AsyncImage(url: url) { image in
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                 } placeholder: {
                     defaultCoverGradient
                 }
@@ -194,33 +199,55 @@ struct UserProfileView: View {
         .padding(.bottom, 16)
     }
     
-    // MARK: - Business Setup Card (for clients)
-    private var businessSetupCard: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Service Provider?")
-                    .font(KHOITheme.headline)
-                    .foregroundColor(KHOIColors.darkText)
-                Text("Create a business page to post work.")
-                    .font(KHOITheme.caption)
-                    .foregroundColor(KHOIColors.mutedText)
-            }
-            
-            Spacer()
-            
-            Button(action: { showBusinessSetup = true }) {
-                Text("Get Started")
-                    .font(KHOITheme.caption)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(KHOIColors.darkText)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+    // MARK: - UPDATED Pro Application Card
+    private var proApplicationCard: some View {
+        VStack(spacing: 12) {
+            if authManager.hasPendingProApplication {
+                // Pending Application State
+                HStack {
+                    Image(systemName: "clock.fill")
+                        .foregroundColor(.orange)
+                        .font(.title2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Application Under Review")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.darkText)
+                        Text("We'll notify you within 24-48 hours")
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.mutedText)
+                    }
+                    Spacer()
+                }
+            } else {
+                // Not Applied Yet
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Service Provider?")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(KHOIColors.darkText)
+                        Text("Apply to become a verified pro.")
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.mutedText)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: { showProOnboarding = true }) {
+                        Text("Apply Now")
+                            .font(KHOITheme.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(KHOIColors.darkText)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                }
             }
         }
         .padding()
-        .background(KHOIColors.cardBackground)
+        .background(KHOIColors.brandRed)
         .cornerRadius(12)
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
