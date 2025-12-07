@@ -69,8 +69,8 @@ struct ArtistProfileView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showBookingSheet) {
-            BookingSheetView(artist: artist, isPresented: $showBookingSheet)
+        .fullScreenCover(isPresented: $showBookingSheet) {
+            BookingFlowView(artist: artist, isPresented: $showBookingSheet)
         }
         .navigationDestination(isPresented: $showChat) {
             if let conversation = activeConversation,
@@ -310,50 +310,28 @@ struct ArtistProfileView: View {
         Group {
             if feedService.isLoading {
                 ProgressView()
+                    .tint(KHOIColors.accentBrown)
                     .padding(.top, 40)
             } else if feedService.userPosts.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 40))
+                        .font(.system(size: 48))
                         .foregroundColor(KHOIColors.mutedText.opacity(0.5))
-                    Text("No posts yet.")
+                    
+                    Text("No posts yet")
                         .font(KHOITheme.body)
                         .foregroundColor(KHOIColors.mutedText)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 60)
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 2) {
-                    ForEach(feedService.userPosts) { post in
-                        AsyncImage(url: URL(string: post.imageURL)) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(KHOIColors.chipBackground)
-                                    .aspectRatio(1, contentMode: .fit)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(minWidth: 0, maxWidth: .infinity)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .clipped()
-                            case .failure:
-                                Rectangle()
-                                    .fill(KHOIColors.chipBackground)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .foregroundColor(KHOIColors.mutedText)
-                                    )
-                            @unknown default:
-                                Rectangle()
-                                    .fill(KHOIColors.chipBackground)
-                            }
-                        }
+                    
+                    if !isOwnProfile {
+                        Text("Check back later for new content")
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.mutedText.opacity(0.7))
                     }
                 }
-                .padding(.horizontal, KHOITheme.spacing_sm)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 80)
+            } else {
+                InstagramGrid(posts: feedService.userPosts)
             }
         }
         .onAppear {

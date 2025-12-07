@@ -46,12 +46,12 @@ struct ArtistProfileLoader: View {
         // First, try to fetch from artists collection
         db.collection("artists").document(artistId).getDocument { snapshot, error in
             if let document = snapshot, document.exists {
-                // Found in artists collection
-                do {
-                    self.artist = try document.data(as: Artist.self)
+                // Found in artists collection - use manual initializer to properly parse servicesDetailed
+                if let artist = Artist(document: document) {
+                    self.artist = artist
                     self.isLoading = false
-                } catch {
-                    print("Error decoding artist: \(error)")
+                } else {
+                    print("Error decoding artist with manual init")
                     // Try users collection as fallback
                     self.fetchFromUsers(db: db)
                 }

@@ -9,29 +9,33 @@ import Foundation
 import FirebaseFirestore
 
 // MARK: - Artist Profile (Claimable)
-struct Artist: Identifiable, Codable {
+struct Artist: Identifiable {
     let id: String
     var fullName: String
     var username: String
     var bio: String
+    
     var profileImageURL: String?
-    var coverImageURL: String?      // Cover photo for profile
-    var services: [String]          // ["Makeup", "Lashes", "Brows"]
-    var servicesDetailed: [ServiceItem]? // ADDED: Detailed service info
+    var coverImageURL: String?
+    
+    var services: [String]
+    var servicesDetailed: [ServiceItem]
+    var portfolioImages: [PortfolioImage]
+    var policies: BusinessPolicies?
     var city: String
     var instagram: String?
     var website: String?
     var phoneNumber: String?
     var claimed: Bool
-    var claimedBy: String?          // Firebase UID of user who claimed
+    var claimedBy: String?
     var claimedAt: Date?
-    var featured: Bool              // Show in discover feed
-    var referralCount: Int          // Number of referrals
-    var reviewCount: Int            // Number of reviews
-    var rating: Double?             // Average rating (1-5)
+    var featured: Bool
+    var referralCount: Int
+    var reviewCount: Int
+    var rating: Double?
+    var verified: Bool
     var createdAt: Date
     
-    // Computed property for display handle
     var displayHandle: String {
         if let instagram = instagram, !instagram.isEmpty {
             return instagram.hasPrefix("@") ? instagram : "@\(instagram)"
@@ -39,7 +43,14 @@ struct Artist: Identifiable, Codable {
         return "@\(username)"
     }
     
-    // Default initializer with sensible defaults
+    func portfolioImagesForCategory(_ category: String) -> [PortfolioImage] {
+        return portfolioImages.filter { $0.serviceCategory == category }
+    }
+    
+    var serviceCategories: [String] {
+        return Array(Set(servicesDetailed.map { $0.category })).sorted()
+    }
+    
     init(
         id: String,
         fullName: String,
@@ -48,7 +59,9 @@ struct Artist: Identifiable, Codable {
         profileImageURL: String? = nil,
         coverImageURL: String? = nil,
         services: [String] = [],
-        servicesDetailed: [ServiceItem]? = nil,
+        servicesDetailed: [ServiceItem] = [],
+        portfolioImages: [PortfolioImage] = [],
+        policies: BusinessPolicies = BusinessPolicies(),
         city: String = "",
         instagram: String? = nil,
         website: String? = nil,
@@ -60,6 +73,7 @@ struct Artist: Identifiable, Codable {
         referralCount: Int = 0,
         reviewCount: Int = 0,
         rating: Double? = nil,
+        verified: Bool = false,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -70,6 +84,8 @@ struct Artist: Identifiable, Codable {
         self.coverImageURL = coverImageURL
         self.services = services
         self.servicesDetailed = servicesDetailed
+        self.portfolioImages = portfolioImages
+        self.policies = policies
         self.city = city
         self.instagram = instagram
         self.website = website
@@ -81,6 +97,7 @@ struct Artist: Identifiable, Codable {
         self.referralCount = referralCount
         self.reviewCount = reviewCount
         self.rating = rating
+        self.verified = verified
         self.createdAt = createdAt
     }
 }
@@ -93,8 +110,8 @@ struct Post: Identifiable, Codable {
     var artistHandle: String
     var artistProfileImageURL: String?
     var imageURL: String
-    var imageHeight: CGFloat        // For masonry layout
-    var tag: String                 // Service category
+    var imageHeight: CGFloat
+    var tag: String
     var caption: String?
     var saveCount: Int
     var createdAt: Date
@@ -107,7 +124,7 @@ struct ClaimRequest: Identifiable, Codable {
     let userId: String
     let userEmail: String
     let userName: String
-    let verificationNote: String    // Why they should be verified
+    let verificationNote: String
     let instagramHandle: String?
     let status: ClaimStatus
     let createdAt: Date
@@ -123,7 +140,6 @@ struct ClaimRequest: Identifiable, Codable {
 }
 
 // MARK: - Firestore Extensions
-
 extension Artist {
     init?(document: DocumentSnapshot) {
         guard let data = document.data() else { return nil }
@@ -136,11 +152,25 @@ extension Artist {
         self.coverImageURL = data["coverImageURL"] as? String
         self.services = data["services"] as? [String] ?? []
         
-        // ADDED: Parse servicesDetailed
+        // Parse servicesDetailed
         if let servicesData = data["servicesDetailed"] as? [[String: Any]] {
             self.servicesDetailed = servicesData.map { ServiceItem.fromFirestore($0) }
         } else {
-            self.servicesDetailed = nil
+            self.servicesDetailed = []
+        }
+        
+        // Parse portfolioImages
+        if let portfolioData = data["portfolioImages"] as? [[String: Any]] {
+            self.portfolioImages = portfolioData.map { PortfolioImage.fromFirestore($0) }
+        } else {
+            self.portfolioImages = []
+        }
+        
+        // Parse policies
+        if let policiesData = data["policies"] as? [String: Any] {
+            self.policies = BusinessPolicies.fromFirestore(policiesData)
+        } else {
+            self.policies = BusinessPolicies()
         }
         
         self.city = data["city"] as? String ?? ""
@@ -154,6 +184,7 @@ extension Artist {
         self.referralCount = data["referralCount"] as? Int ?? 0
         self.reviewCount = data["reviewCount"] as? Int ?? 0
         self.rating = data["rating"] as? Double
+        self.verified = data["verified"] as? Bool ?? false
         self.createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
     }
     
@@ -163,11 +194,15 @@ extension Artist {
             "username": username,
             "bio": bio,
             "services": services,
+            "servicesDetailed": servicesDetailed.map { $0.toFirestoreData() },
+            "portfolioImages": portfolioImages.map { $0.toFirestoreData() },
+            "policies": policies?.toFirestoreData(),
             "city": city,
             "claimed": claimed,
             "featured": featured,
             "referralCount": referralCount,
             "reviewCount": reviewCount,
+            "verified": verified,
             "createdAt": Timestamp(date: createdAt)
         ]
         
@@ -176,9 +211,6 @@ extension Artist {
         }
         if let coverImageURL = coverImageURL {
             data["coverImageURL"] = coverImageURL
-        }
-        if let servicesDetailed = servicesDetailed {
-            data["servicesDetailed"] = servicesDetailed.map { $0.toFirestoreData() }
         }
         if let instagram = instagram {
             data["instagram"] = instagram
@@ -288,3 +320,4 @@ extension ClaimRequest {
         return data
     }
 }
+

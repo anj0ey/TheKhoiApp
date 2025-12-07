@@ -234,12 +234,12 @@ struct UserProfileView: View {
                     Spacer()
                     
                     Button(action: { showProOnboarding = true }) {
-                        Text("Apply Now")
+                        Text("Verify Here")
                             .font(KHOITheme.caption)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(KHOIColors.darkText)
+                            .background(KHOIColors.brandRed)
                             .foregroundColor(.white)
                             .cornerRadius(8)
                     }
@@ -247,7 +247,7 @@ struct UserProfileView: View {
             }
         }
         .padding()
-        .background(KHOIColors.brandRed)
+        .background(KHOIColors.white)
         .cornerRadius(12)
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -303,21 +303,31 @@ struct UserProfileView: View {
         }
     }
     
-    // MARK: - Posts Grid (for professionals)
+    // MARK: - Posts Grid (for professionals) - UPDATED TO 3x3
     private var postsGridSection: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2)
-            ],
-            spacing: 2
-        ) {
-            ForEach(feedService.userPosts) { post in
-                postGridTile(post: post)
+        Group {
+            if feedService.userPosts.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                    
+                    Text("No posts yet")
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                    
+                    Text("Share your work to build your portfolio")
+                        .font(KHOITheme.caption)
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 80)
+            } else {
+                InstagramGrid(posts: feedService.userPosts)
+                    .padding(.top, 4)
             }
         }
-        .padding(.top, 8)
     }
     
     private func postGridTile(post: Post) -> some View {
@@ -523,6 +533,62 @@ struct SavedPostCard: View {
             return String(format: "%.1fk saved", Double(count) / 1000.0)
         }
         return "\(count) saved"
+    }
+}
+
+// MARK: - Instagram-Style 3x3 Grid Component
+struct InstagramGrid: View {
+    let posts: [Post]
+    let columns = 3
+    let spacing: CGFloat = 1
+    
+    var body: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns),
+            spacing: spacing
+        ) {
+            ForEach(posts) { post in
+                GridPostTile(post: post)
+            }
+        }
+    }
+}
+
+struct GridPostTile: View {
+    let post: Post
+    
+    var body: some View {
+        GeometryReader { geometry in
+            AsyncImage(url: URL(string: post.imageURL)) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(KHOIColors.chipBackground)
+                        .overlay(
+                            ProgressView()
+                                .tint(KHOIColors.mutedText)
+                        )
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width, height: geometry.size.width)
+                        .clipped()
+                case .failure:
+                    Rectangle()
+                        .fill(KHOIColors.chipBackground)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(KHOIColors.mutedText)
+                                .font(.system(size: 24))
+                        )
+                @unknown default:
+                    Rectangle()
+                        .fill(KHOIColors.chipBackground)
+                }
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
     }
 }
 
