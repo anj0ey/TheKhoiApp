@@ -97,12 +97,12 @@ struct BookingFlowView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
                 
-                // Service cards
-                if let services = artist.servicesDetailed, !services.isEmpty {
-                    ForEach(services) { service in
-                        ServiceCard(
+                // Service cards - only show detailed services (no fallback)
+                if artist.hasDetailedServices {
+                    ForEach(artist.servicesDetailed) { service in
+                        BookingServiceCard(
                             service: service,
-                            portfolioImage: artist.portfolioImages(for: service.category).first
+                            portfolioImage: artist.portfolioImagesForCategory(service.category).first
                         ) {
                             bookingState.selectedService = service
                             withAnimation { currentStep = 2 }
@@ -110,19 +110,17 @@ struct BookingFlowView: View {
                         .padding(.horizontal)
                     }
                 } else {
-                    // Fallback
-                    ForEach(artist.services, id: \.self) { serviceName in
-                        BasicServiceCard(serviceName: serviceName) {
-                            bookingState.selectedService = ServiceItem(
-                                name: serviceName,
-                                category: serviceName,
-                                duration: 60,
-                                price: 0
-                            )
-                            withAnimation { currentStep = 2 }
-                        }
-                        .padding(.horizontal)
+                    // Empty state - should not happen if booking flow is only accessible when hasDetailedServices
+                    VStack(spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 40))
+                            .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                        Text("No services available")
+                            .font(KHOITheme.body)
+                            .foregroundColor(KHOIColors.mutedText)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 60)
                 }
             }
             .padding(.bottom, 40)
@@ -144,7 +142,7 @@ struct BookingFlowView: View {
                         .padding(.top, 8)
                     
                     // Portfolio grid
-                    let images = artist.portfolioImages(for: service.category)
+                    let images = artist.portfolioImagesForCategory( service.category)
                     PortfolioGridView(images: images)
                         .padding(.top, 12)
                     
@@ -230,7 +228,7 @@ struct BookingFlowView: View {
                         }
                         
                         // Explore More section
-                        if let services = artist.servicesDetailed, services.count > 1 {
+                        if artist.servicesDetailed.count > 1 {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("EXPLORE MORE")
                                     .font(.system(size: 11, weight: .bold))
@@ -240,10 +238,10 @@ struct BookingFlowView: View {
                                 
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 12) {
-                                        ForEach(services.filter { $0.id != service.id }) { otherService in
+                                        ForEach(artist.servicesDetailed.filter { $0.id != service.id }) { otherService in
                                             ExploreServiceCard(
                                                 service: otherService,
-                                                image: artist.portfolioImages(for: otherService.category).first
+                                                image: artist.portfolioImagesForCategory(otherService.category).first
                                             ) {
                                                 bookingState.selectedService = otherService
                                             }
@@ -751,7 +749,7 @@ struct BookingFlowView: View {
 
 // MARK: - Supporting Views
 
-struct ServiceCard: View {
+struct BookingServiceCard: View {
     let service: ServiceItem
     let portfolioImage: PortfolioImage?
     let onTap: () -> Void
@@ -798,33 +796,6 @@ struct ServiceCard: View {
                 }
                 
                 Spacer()
-            }
-            .padding()
-            .background(Color.white)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.03), radius: 8)
-        }
-    }
-}
-
-struct BasicServiceCard: View {
-    let serviceName: String
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(serviceName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(KHOIColors.darkText)
-                    Text("Contact for pricing")
-                        .font(KHOITheme.caption)
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundColor(KHOIColors.mutedText)
             }
             .padding()
             .background(Color.white)
@@ -1168,20 +1139,5 @@ struct CheckboxToggleStyle: ToggleStyle {
                 configuration.label
             }
         }
-    }
-}
-
-// MARK: - Artist Extension for Portfolio Images
-
-extension Artist {
-    func portfolioImages(for category: String) -> [PortfolioImage] {
-        // This would need to be fetched from Firebase
-        // For now, return empty array - will be populated from artist data
-        return []
-    }
-    
-    var policies: BusinessPolicies? {
-        // This would be stored in the artist document
-        return nil
     }
 }

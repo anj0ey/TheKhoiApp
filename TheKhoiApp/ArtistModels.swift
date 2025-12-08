@@ -3,6 +3,7 @@
 //  TheKhoiApp
 //
 //  Data models for artists and posts
+//  NOTE: ServiceItem, BusinessPolicies, and PortfolioImage are defined in ProApplicationModels.swift
 //
 
 import Foundation
@@ -18,10 +19,10 @@ struct Artist: Identifiable {
     var profileImageURL: String?
     var coverImageURL: String?
     
-    var services: [String]
-    var servicesDetailed: [ServiceItem]
-    var portfolioImages: [PortfolioImage]
-    var policies: BusinessPolicies?
+    var services: [String]  // Legacy simple service names (deprecated)
+    var servicesDetailed: [ServiceItem]  // Full service details from pro application
+    var portfolioImages: [PortfolioImage]  // Portfolio images from pro application
+    var policies: BusinessPolicies?  // Business policies from pro application
     var city: String
     var instagram: String?
     var website: String?
@@ -43,12 +44,19 @@ struct Artist: Identifiable {
         return "@\(username)"
     }
     
+    /// Get portfolio images for a specific service category
     func portfolioImagesForCategory(_ category: String) -> [PortfolioImage] {
         return portfolioImages.filter { $0.serviceCategory == category }
     }
     
+    /// Get unique service categories
     var serviceCategories: [String] {
         return Array(Set(servicesDetailed.map { $0.category })).sorted()
+    }
+    
+    /// Check if this artist has real services (filled out by pro)
+    var hasDetailedServices: Bool {
+        return !servicesDetailed.isEmpty
     }
     
     init(
@@ -61,7 +69,7 @@ struct Artist: Identifiable {
         services: [String] = [],
         servicesDetailed: [ServiceItem] = [],
         portfolioImages: [PortfolioImage] = [],
-        policies: BusinessPolicies = BusinessPolicies(),
+        policies: BusinessPolicies? = nil,
         city: String = "",
         instagram: String? = nil,
         website: String? = nil,
@@ -152,28 +160,28 @@ extension Artist {
         self.coverImageURL = data["coverImageURL"] as? String
         self.services = data["services"] as? [String] ?? []
         
-        // Parse servicesDetailed
+        // Parse servicesDetailed - only from pro application data
         if let servicesData = data["servicesDetailed"] as? [[String: Any]] {
             self.servicesDetailed = servicesData.map { ServiceItem.fromFirestore($0) }
         } else {
             self.servicesDetailed = []
         }
         
-        // Parse portfolioImages
+        // Parse portfolioImages - only from pro application data
         if let portfolioData = data["portfolioImages"] as? [[String: Any]] {
             self.portfolioImages = portfolioData.map { PortfolioImage.fromFirestore($0) }
         } else {
             self.portfolioImages = []
         }
         
-        // Parse policies
+        // Parse policies - only from pro application data
         if let policiesData = data["policies"] as? [String: Any] {
             self.policies = BusinessPolicies.fromFirestore(policiesData)
         } else {
-            self.policies = BusinessPolicies()
+            self.policies = nil
         }
         
-        self.city = data["city"] as? String ?? ""
+        self.city = data["city"] as? String ?? data["location"] as? String ?? ""
         self.instagram = data["instagram"] as? String
         self.website = data["website"] as? String
         self.phoneNumber = data["phoneNumber"] as? String
@@ -196,7 +204,6 @@ extension Artist {
             "services": services,
             "servicesDetailed": servicesDetailed.map { $0.toFirestoreData() },
             "portfolioImages": portfolioImages.map { $0.toFirestoreData() },
-            "policies": policies?.toFirestoreData(),
             "city": city,
             "claimed": claimed,
             "featured": featured,
@@ -206,6 +213,9 @@ extension Artist {
             "createdAt": Timestamp(date: createdAt)
         ]
         
+        if let policies = policies {
+            data["policies"] = policies.toFirestoreData()
+        }
         if let profileImageURL = profileImageURL {
             data["profileImageURL"] = profileImageURL
         }
@@ -320,4 +330,3 @@ extension ClaimRequest {
         return data
     }
 }
-

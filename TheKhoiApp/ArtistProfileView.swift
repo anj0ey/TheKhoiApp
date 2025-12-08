@@ -115,19 +115,21 @@ struct ArtistProfileView: View {
                 }
                 .disabled(isCreatingChat)
                 
-                // Book Button
-                Button(action: { showBookingSheet = true }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 16))
-                        Text("Book")
-                            .font(KHOITheme.bodyBold)
+                // Book Button - only show if artist has detailed services
+                if artist.hasDetailedServices {
+                    Button(action: { showBookingSheet = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 16))
+                            Text("Book")
+                                .font(KHOITheme.bodyBold)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(KHOIColors.darkText)
+                        .cornerRadius(16)
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(KHOIColors.darkText)
-                    .cornerRadius(16)
                 }
             }
             .padding(.horizontal, KHOITheme.spacing_md)
@@ -282,7 +284,10 @@ struct ArtistProfileView: View {
     private var tabSection: some View {
         HStack(spacing: 0) {
             tabButton(title: "Posts")
-            tabButton(title: "Services")
+            // Only show Services tab if artist has detailed services from pro application
+            if artist.hasDetailedServices {
+                tabButton(title: "Services")
+            }
             tabButton(title: "Reviews")
         }
         .padding(.top, KHOITheme.spacing_lg)
@@ -341,10 +346,9 @@ struct ArtistProfileView: View {
     
     private var servicesList: some View {
         VStack(spacing: 16) {
-            // Check if we have detailed services first
-            if let detailedServices = artist.servicesDetailed, !detailedServices.isEmpty {
-                // Show detailed services with real prices
-                ForEach(detailedServices) { service in
+            // Only show services if artist has detailed services from pro application
+            if artist.hasDetailedServices {
+                ForEach(artist.servicesDetailed) { service in
                     HStack(alignment: .top, spacing: 12) {
                         // Category color bar
                         RoundedRectangle(cornerRadius: 2)
@@ -414,40 +418,8 @@ struct ArtistProfileView: View {
                     .background(KHOIColors.cardBackground)
                     .cornerRadius(12)
                 }
-            }
-            // Fallback to basic services (for older profiles without detailed info)
-            else if !artist.services.isEmpty {
-                ForEach(artist.services, id: \.self) { service in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(service)
-                                .font(KHOITheme.body)
-                                .bold()
-                            Text("Contact for pricing")
-                                .font(KHOITheme.caption)
-                                .foregroundColor(KHOIColors.mutedText)
-                        }
-                        Spacer()
-                        
-                        if !isOwnProfile {
-                            Button("Book") {
-                                showBookingSheet = true
-                            }
-                            .font(KHOITheme.caption.bold())
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(KHOIColors.darkText)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                        }
-                    }
-                    .padding()
-                    .background(KHOIColors.cardBackground)
-                    .cornerRadius(12)
-                }
-            }
-            // Empty state
-            else {
+            } else {
+                // Empty state - no services
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 40))

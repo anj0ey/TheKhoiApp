@@ -372,12 +372,11 @@ class FeedService: ObservableObject {
                 return
             }
             
-            // 2. Try to decode it
-            do {
-                let artist = try document.data(as: Artist.self)
+            // 2. Use manual initializer instead of Codable
+            if let artist = Artist(document: document) {
                 completion(artist)
-            } catch {
-                print("❌ Error decoding artist: \(error.localizedDescription)")
+            } else {
+                print("❌ Error decoding artist with manual init")
                 completion(nil)
             }
         }
