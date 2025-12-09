@@ -543,6 +543,7 @@ struct BookingFlowView: View {
                     InfoRow(label: "Email Address:", value: authManager.currentUser?.email ?? "")
                 }
                 .padding(.horizontal)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Text Notifications
                 VStack(alignment: .leading, spacing: 12) {
@@ -602,22 +603,10 @@ struct BookingFlowView: View {
                 Spacer()
                 
                 // Balloon/heart image
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(KHOIColors.accentBrown.opacity(0.6))
-                    .overlay(
-                        VStack(spacing: 4) {
-                            Text("Talk to")
-                                .font(.system(size: 10))
-                            Text("yourself like")
-                                .font(.system(size: 10))
-                            Text("someone")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("you love")
-                                .font(.system(size: 10))
-                        }
-                        .foregroundColor(.white)
-                    )
+                Image("free use")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
                 
                 VStack(spacing: 8) {
                     Text("self-care is the best care.")

@@ -27,6 +27,9 @@ struct ArtistProfileView: View {
     @State private var activeConversation: Conversation?
     @State private var isCreatingChat = false
     
+    // Review State (lifted from ReviewsListView for full-screen overlay)
+    @State private var showReviewLimitPopup = false
+    
     // Check if this is the current user's own profile
     private var isOwnProfile: Bool {
         authManager.firebaseUID == artist.id
@@ -53,9 +56,12 @@ struct ArtistProfileView: View {
                     } else if selectedTab == "Services" {
                         servicesList
                     } else {
-                        Text("No reviews yet.")
-                            .foregroundColor(KHOIColors.mutedText)
-                            .padding(.top, 40)
+                        // Reviews tab - pass binding for popup
+                        ReviewsListView(
+                            artist: artist,
+                            showReviewLimitPopup: $showReviewLimitPopup
+                        )
+                        .environmentObject(authManager)
                     }
                     
                     // Spacer for the floating buttons
@@ -79,6 +85,18 @@ struct ArtistProfileView: View {
                     conversation: conversation,
                     currentUserId: currentUserId,
                     chatService: chatService
+                )
+            }
+        }
+        // Full-screen review limit popup overlay
+        .overlay {
+            if showReviewLimitPopup {
+                ReviewLimitPopup(
+                    isPresented: $showReviewLimitPopup,
+                    onBookAppointment: {
+                        showReviewLimitPopup = false
+                        showBookingSheet = true
+                    }
                 )
             }
         }
@@ -235,6 +253,7 @@ struct ArtistProfileView: View {
                 }
                 Spacer()
                 
+                /*
                 // Save Button (only show if not own profile)
                 if !isOwnProfile {
                     HStack(spacing: 12) {
@@ -248,6 +267,7 @@ struct ArtistProfileView: View {
                         }
                     }
                 }
+                */
             }
             
             if !artist.bio.isEmpty {
