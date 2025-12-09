@@ -480,10 +480,12 @@ struct SavedPostCard: View {
                         .frame(width: 24, height: 24)
                 }
                 
-                Text(post.artistHandle.replacingOccurrences(of: "@", with: ""))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(KHOIColors.darkText)
-                    .lineLimit(1)
+                NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
+                    Text(post.artistHandle.replacingOccurrences(of: "@", with: ""))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(KHOIColors.darkText)
+                        .lineLimit(1)
+                }
                 
                 Spacer()
                 
@@ -491,28 +493,31 @@ struct SavedPostCard: View {
             }
             .padding(.bottom, 8)
             
-            // Post image
-            AsyncImage(url: URL(string: post.imageURL)) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(KHOIColors.chipBackground)
-                        .aspectRatio(0.8, contentMode: .fit)
-                        .overlay(ProgressView())
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                case .failure:
-                    Rectangle()
-                        .fill(KHOIColors.chipBackground)
-                        .aspectRatio(0.8, contentMode: .fit)
-                @unknown default:
-                    Rectangle()
-                        .fill(KHOIColors.chipBackground)
+            // Post image - navigate to PostDetailView
+            NavigationLink(destination: PostDetailView(post: post)) {
+                AsyncImage(url: URL(string: post.imageURL)) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                            .aspectRatio(0.8, contentMode: .fit)
+                            .overlay(ProgressView())
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    case .failure:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                            .aspectRatio(0.8, contentMode: .fit)
+                    @unknown default:
+                        Rectangle()
+                            .fill(KHOIColors.chipBackground)
+                    }
                 }
+                .cornerRadius(12)
             }
-            .cornerRadius(12)
+            .buttonStyle(.plain)
             
             // Save count
             HStack(spacing: 6) {
@@ -548,7 +553,10 @@ struct InstagramGrid: View {
             spacing: spacing
         ) {
             ForEach(posts) { post in
-                GridPostTile(post: post)
+                NavigationLink(destination: PostDetailView(post: post)) {
+                    GridPostTile(post: post)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

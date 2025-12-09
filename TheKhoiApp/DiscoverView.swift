@@ -130,7 +130,8 @@ struct DiscoverView: View {
                         .foregroundColor(KHOIColors.mutedText)
                         .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // Grid of post results
+                    // Grid of post results - navigate to Artist Profile
+                    // (PostSearchResult doesn't have full Post data needed for PostDetailView)
                     LazyVGrid(
                         columns: [
                             GridItem(.flexible(), spacing: 8),
@@ -507,7 +508,8 @@ struct DiscoverPostCard: View {
     }
     
     private var postImage: some View {
-        NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
+        // Navigate to PostDetailView when tapping the image
+        NavigationLink(destination: PostDetailView(post: post)) {
             AsyncImage(url: URL(string: post.imageURL)) { phase in
                 switch phase {
                 case .empty:

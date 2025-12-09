@@ -18,7 +18,7 @@ struct AppointmentsView: View {
                 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(authManager.isBusinessMode ? "SCHEDULE" : "APPOINTMENTS")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(KHOITheme.headline)
                         .tracking(2)
                         .foregroundColor(KHOIColors.mutedText)
                         .padding(.horizontal)
