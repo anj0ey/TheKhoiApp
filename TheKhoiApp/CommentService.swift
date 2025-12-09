@@ -23,24 +23,29 @@ class CommentService: ObservableObject {
         
         commentsListener?.remove()
         
+        // Note: Using only whereField without orderBy to avoid needing composite index
+        // Sorting is done locally after fetching
         commentsListener = db.collection("comments")
             .whereField("postId", isEqualTo: postId)
-            .order(by: "createdAt", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
-                self?.isLoading = false
-                
-                if let error = error {
-                    self?.errorMessage = error.localizedDescription
-                    print("Error fetching comments: \(error)")
-                    return
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    
+                    if let error = error {
+                        self?.errorMessage = error.localizedDescription
+                        print("Error fetching comments: \(error)")
+                        return
+                    }
+                    
+                    guard let documents = snapshot?.documents else {
+                        self?.comments = []
+                        return
+                    }
+                    
+                    // Parse comments and sort locally by createdAt (oldest first)
+                    let fetchedComments = documents.compactMap { Comment.fromFirestore(document: $0) }
+                    self?.comments = fetchedComments.sorted { $0.createdAt < $1.createdAt }
                 }
-                
-                guard let documents = snapshot?.documents else {
-                    self?.comments = []
-                    return
-                }
-                
-                self?.comments = documents.compactMap { Comment.fromFirestore(document: $0) }
             }
     }
     
