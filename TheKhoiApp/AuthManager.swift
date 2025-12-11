@@ -91,6 +91,10 @@ final class AuthManager: ObservableObject {
     // Where we store the profile in UserDefaults
     private let userKey = "currentUserProfile"
     
+    // MARK: - Email Auth State
+    @Published var isEmailLoading: Bool = false
+    @Published var emailAuthError: String?
+    
     func toggleUserMode() {
         // Only toggle if user has business profile
         guard hasBusinessProfile else {
@@ -104,6 +108,194 @@ final class AuthManager: ObservableObject {
     init() {
         // Check if Firebase already has an active session
         checkAuthState()
+    }
+    
+    // MARK: - Check if Email Exists in Database
+    
+    func checkEmailExists(email: String, completion: @escaping (Bool) -> Void) {
+        isEmailLoading = true
+        emailAuthError = nil
+        
+        // Check if email exists in users collection
+        db.collection("users")
+            .whereField("email", isEqualTo: email.lowercased().trimmingCharacters(in: .whitespaces))
+            .getDocuments { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    self?.isEmailLoading = false
+                    
+                    if let error = error {
+                        print("Error checking email: \(error.localizedDescription)")
+                        self?.emailAuthError = "Error checking email. Please try again."
+                        completion(false)
+                        return
+                    }
+                    
+                    let exists = !(snapshot?.documents.isEmpty ?? true)
+                    print(exists ? "Email exists in database" : "Email not found, new user")
+                    completion(exists)
+                }
+            }
+    }
+    
+    // MARK: - Sign In with Email/Password
+    
+    func signInWithEmail(email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+        isEmailLoading = true
+        emailAuthError = nil
+        
+        let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        Auth.auth().signIn(withEmail: trimmedEmail, password: password) { [weak self] authResult, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isEmailLoading = false
+                
+                if let error = error {
+                    let nsError = error as NSError
+                    var errorMessage = "Sign in failed. Please try again."
+                    
+                    // Handle specific Firebase Auth errors
+                    if nsError.domain == "FIRAuthErrorDomain" {
+                        switch nsError.code {
+                        case 17009: // Wrong password
+                            errorMessage = "Incorrect password. Please try again."
+                        case 17011: // User not found
+                            errorMessage = "No account found with this email."
+                        case 17010: // Too many attempts
+                            errorMessage = "Too many failed attempts. Please try again later."
+                        default:
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    
+                    print("Email sign in error: \(error.localizedDescription)")
+                    self.emailAuthError = errorMessage
+                    completion(false, errorMessage)
+                    return
+                }
+                
+                guard let user = authResult?.user else {
+                    completion(false, "Authentication failed.")
+                    return
+                }
+                
+                print("Email Sign In successful for: \(user.email ?? "No email")")
+                
+                self.firebaseUID = user.uid
+                self.authenticatedEmail = user.email
+                self.authenticatedName = user.displayName
+                
+                self.checkExistingProfile(uid: user.uid)
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // MARK: - Create Account with Email/Password
+    
+    func createAccountWithEmail(email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+        isEmailLoading = true
+        emailAuthError = nil
+        
+        let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        Auth.auth().createUser(withEmail: trimmedEmail, password: password) { [weak self] authResult, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isEmailLoading = false
+                
+                if let error = error {
+                    let nsError = error as NSError
+                    var errorMessage = "Account creation failed. Please try again."
+                    
+                    if nsError.domain == "FIRAuthErrorDomain" {
+                        switch nsError.code {
+                        case 17007: // Email already in use
+                            errorMessage = "An account with this email already exists."
+                        case 17008: // Invalid email
+                            errorMessage = "Please enter a valid email address."
+                        case 17026: // Weak password
+                            errorMessage = "Password must be at least 6 characters."
+                        default:
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    
+                    print("Create account error: \(error.localizedDescription)")
+                    self.emailAuthError = errorMessage
+                    completion(false, errorMessage)
+                    return
+                }
+                
+                guard let user = authResult?.user else {
+                    completion(false, "Account creation failed.")
+                    return
+                }
+                
+                print("Account created successfully for: \(user.email ?? "No email")")
+                
+                self.firebaseUID = user.uid
+                self.authenticatedEmail = user.email
+                self.authenticatedName = nil // New user, no name yet
+                
+                // New user needs profile setup
+                self.needsProfileSetup = true
+                self.isOnboardingComplete = false
+                
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // MARK: - Continue with Email (Check + Route)
+    
+    func continueWithEmail(email: String, completion: @escaping (Bool, Bool) -> Void) {
+        // Returns: (success, existingUser)
+        // existingUser = true means they need to enter password
+        // existingUser = false means they're new and need onboarding
+        
+        isEmailLoading = true
+        emailAuthError = nil
+        
+        let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        // First check Firebase Auth if this email exists
+        Auth.auth().fetchSignInMethods(forEmail: trimmedEmail) { [weak self] methods, error in
+            DispatchQueue.main.async {
+                self?.isEmailLoading = false
+                
+                if let error = error {
+                    print("Error checking email: \(error.localizedDescription)")
+                    self?.emailAuthError = "Error checking email. Please try again."
+                    completion(false, false)
+                    return
+                }
+                
+                // If methods is not empty, user exists
+                let userExists = !(methods?.isEmpty ?? true)
+                self?.authenticatedEmail = trimmedEmail
+                
+                print(userExists ? "Existing user found" : "ℹ️ New user")
+                completion(true, userExists)
+            }
+        }
+    }
+    
+    // MARK: - Start New User Profile Setup (without Firebase account yet)
+    
+    func startNewUserProfileSetup(email: String) {
+        let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        DispatchQueue.main.async {
+            self.authenticatedEmail = trimmedEmail
+            self.authenticatedName = nil
+            self.needsProfileSetup = true
+            self.isOnboardingComplete = false
+        }
+        
+        print("Starting profile setup for new user: \(trimmedEmail)")
     }
     
     // MARK: - Check Auth State on Launch
@@ -191,13 +383,13 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Error fetching profile: \(error.localizedDescription)")
+                print("Error fetching profile: \(error.localizedDescription)")
                 self.isCheckingAuth = false
                 return
             }
             
             if let document = document, document.exists {
-                print("✅ Found existing user profile")
+                print("Found existing user profile")
                 
                 // Manual parsing to handle optional fields gracefully
                 let data = document.data() ?? [:]
@@ -221,7 +413,7 @@ final class AuthManager: ObservableObject {
                     self.checkBusinessProfile(uid: uid)
                 }
             } else {
-                print("⚠️ No profile found for this UID. Redirecting to Profile Setup.")
+                print("No profile found for this UID. Redirecting to Profile Setup.")
                 DispatchQueue.main.async {
                     self.needsProfileSetup = true
                     self.isOnboardingComplete = false
@@ -243,14 +435,14 @@ final class AuthManager: ObservableObject {
             
             DispatchQueue.main.async {
                 if let document = document, document.exists {
-                    print("✅ User has a business profile")
+                    print("User has a business profile")
                     self.hasBusinessProfile = true
                     
                     // Restore saved business mode preference only if they have a profile
                     let savedMode = UserDefaults.standard.bool(forKey: "isBusinessMode")
                     self.isBusinessMode = savedMode
                 } else {
-                    print("ℹ️ User does not have a business profile")
+                    print("User does not have a business profile")
                     self.hasBusinessProfile = false
                     self.isBusinessMode = false // Force client mode
                     
@@ -268,20 +460,79 @@ final class AuthManager: ObservableObject {
         checkExistingProfile(uid: uid)
     }
     
-    func finishProfileSetup(username: String, bio: String, password: String, completion: @escaping (Bool, String?) -> Void) {
-        print("📝 Starting profile setup for:", username)
+    func finishProfileSetup(username: String, bio: String, fullName: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+        print("Starting profile setup for:", username)
         
-        guard let uid = firebaseUID else {
-            print("❌ No Firebase UID available")
-            completion(false, "Authentication error. Please try signing in again.")
-            return
+        // If we don't have a Firebase UID yet, we need to create the account first
+        if firebaseUID == nil {
+            guard let email = authenticatedEmail else {
+                completion(false, "No email found. Please try again.")
+                return
+            }
+            
+            // Create Firebase Auth account
+            Auth.auth().createUser(withEmail: email, password: password) { [weak self] authResult, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    let nsError = error as NSError
+                    var errorMessage = "Account creation failed. Please try again."
+                    
+                    if nsError.domain == "FIRAuthErrorDomain" {
+                        switch nsError.code {
+                        case 17007:
+                            errorMessage = "An account with this email already exists."
+                        case 17008:
+                            errorMessage = "Please enter a valid email address."
+                        case 17026:
+                            errorMessage = "Password must be at least 6 characters."
+                        default:
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    
+                    print("Create account error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        completion(false, errorMessage)
+                    }
+                    return
+                }
+                
+                guard let user = authResult?.user else {
+                    DispatchQueue.main.async {
+                        completion(false, "Account creation failed.")
+                    }
+                    return
+                }
+                
+                print("Firebase account created for: \(user.email ?? "No email")")
+                
+                // Now save the profile
+                self.firebaseUID = user.uid
+                self.saveProfileToFirestore(
+                    uid: user.uid,
+                    username: username,
+                    bio: bio,
+                    fullName: fullName,
+                    completion: completion
+                )
+            }
+        } else {
+            // Already have Firebase UID (e.g., from Google Sign-In)
+            saveProfileToFirestore(
+                uid: firebaseUID!,
+                username: username,
+                bio: bio,
+                fullName: fullName,
+                completion: completion
+            )
         }
-        
-        UserDefaults.standard.set(password, forKey: "demoPassword")
-        
+    }
+    
+    private func saveProfileToFirestore(uid: String, username: String, bio: String, fullName: String, completion: @escaping (Bool, String?) -> Void) {
         let user = UserProfile(
             id: uid,
-            fullName: authenticatedName ?? "",
+            fullName: fullName,
             email: authenticatedEmail ?? "",
             username: username,
             bio: bio,
@@ -305,15 +556,18 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Firestore write error:", error.localizedDescription)
-                completion(false, "Failed to save profile. Please try again.")
+                print("Firestore write error:", error.localizedDescription)
+                DispatchQueue.main.async {
+                    completion(false, "Failed to save profile. Please try again.")
+                }
                 return
             }
             
-            print("✅ Profile saved to Firestore successfully")
+            print("Profile saved to Firestore successfully")
             
             DispatchQueue.main.async {
                 self.currentUser = user
+                self.authenticatedName = fullName
                 self.saveUser(user)
                 self.completeOnboarding()
                 completion(true, nil)
@@ -346,7 +600,7 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Error updating profile: \(error.localizedDescription)")
+                print("Error updating profile: \(error.localizedDescription)")
                 completion(false)
             } else {
                 // Update local user
@@ -379,14 +633,14 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Error uploading profile image: \(error.localizedDescription)")
+                print("Error uploading profile image: \(error.localizedDescription)")
                 completion(false)
                 return
             }
             
             profileImageRef.downloadURL { url, error in
                 if let error = error {
-                    print("❌ Error getting download URL: \(error.localizedDescription)")
+                    print("Error getting download URL: \(error.localizedDescription)")
                     completion(false)
                     return
                 }
@@ -401,7 +655,7 @@ final class AuthManager: ObservableObject {
                     "profileImageURL": downloadURL.absoluteString
                 ]) { error in
                     if let error = error {
-                        print("❌ Error updating profile image URL: \(error.localizedDescription)")
+                        print("Error updating profile image URL: \(error.localizedDescription)")
                         completion(false)
                     } else {
                         DispatchQueue.main.async {
@@ -417,9 +671,9 @@ final class AuthManager: ObservableObject {
                                 "profileImageURL": downloadURL.absoluteString
                             ]) { error in
                                 if let error = error {
-                                    print("❌ Error updating artist profile image: \(error.localizedDescription)")
+                                    print("Error updating artist profile image: \(error.localizedDescription)")
                                 } else {
-                                    print("✅ Artist profile image updated")
+                                    print("Artist profile image updated")
                                 }
                             }
                         }
@@ -446,14 +700,14 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Error uploading cover image: \(error.localizedDescription)")
+                print("Error uploading cover image: \(error.localizedDescription)")
                 completion(false)
                 return
             }
             
             coverImageRef.downloadURL { url, error in
                 if let error = error {
-                    print("❌ Error getting download URL: \(error.localizedDescription)")
+                    print("Error getting download URL: \(error.localizedDescription)")
                     completion(false)
                     return
                 }
@@ -468,7 +722,7 @@ final class AuthManager: ObservableObject {
                     "coverImageURL": downloadURL.absoluteString
                 ]) { error in
                     if let error = error {
-                        print("❌ Error updating cover image URL: \(error.localizedDescription)")
+                        print("Error updating cover image URL: \(error.localizedDescription)")
                         completion(false)
                     } else {
                         DispatchQueue.main.async {
@@ -484,9 +738,9 @@ final class AuthManager: ObservableObject {
                                 "coverImageURL": downloadURL.absoluteString
                             ]) { error in
                                 if let error = error {
-                                    print("❌ Error updating artist cover image: \(error.localizedDescription)")
+                                    print("Error updating artist cover image: \(error.localizedDescription)")
                                 } else {
-                                    print("✅ Artist cover image updated")
+                                    print("Artist cover image updated")
                                 }
                             }
                         }
@@ -632,14 +886,14 @@ final class AuthManager: ObservableObject {
         // 1. Sign out of Firebase
         do {
             try Auth.auth().signOut()
-            print("✅ Firebase sign out successful")
+            print("Firebase sign out successful")
         } catch {
-            print("❌ Firebase sign out error:", error.localizedDescription)
+            print("Firebase sign out error:", error.localizedDescription)
         }
         
         // 2. Sign out of Google
         GIDSignIn.sharedInstance.signOut()
-        print("✅ Google sign out successful")
+        print("Google sign out successful")
         
         // 3. Clear all user data
         currentUser = nil
@@ -681,7 +935,7 @@ final class AuthManager: ObservableObject {
         case .success(let authorization):
             handleAppleSignIn(authorization: authorization, nonce: currentNonce)
         case .failure(let error):
-            print("❌ Apple Sign In failed: \(error.localizedDescription)")
+            print("Apple Sign In failed: \(error.localizedDescription)")
         }
     }
     
@@ -693,8 +947,26 @@ final class AuthManager: ObservableObject {
               let nonce = nonce,
               let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            print("❌ Unable to get Apple ID Token")
+            print("Unable to get Apple ID Token")
             return
+        }
+        
+        // Extract name from Apple credential (only available on FIRST sign-in)
+        var extractedName: String? = nil
+        if let fullName = appleIDCredential.fullName {
+            let nameParts = [fullName.givenName, fullName.familyName].compactMap { $0 }
+            if !nameParts.isEmpty {
+                extractedName = nameParts.joined(separator: " ")
+                // Store in UserDefaults as backup since Apple only sends this once
+                UserDefaults.standard.set(extractedName, forKey: "appleSignInName_\(appleIDCredential.user)")
+                print("📝 Stored Apple name: \(extractedName ?? "nil")")
+            }
+        }
+        
+        // If no name from Apple, try to retrieve from UserDefaults (for returning users)
+        if extractedName == nil || extractedName?.isEmpty == true {
+            extractedName = UserDefaults.standard.string(forKey: "appleSignInName_\(appleIDCredential.user)")
+            print("📝 Retrieved stored Apple name: \(extractedName ?? "nil")")
         }
         
         let credential = OAuthProvider.appleCredential(
@@ -707,23 +979,31 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Firebase Apple auth error:", error.localizedDescription)
+                print("Firebase Apple auth error:", error.localizedDescription)
                 return
             }
             
             guard let user = authResult?.user else { return }
             
-            print("✅ Apple Sign In successful for:", user.email ?? "No email")
+            print("Apple Sign In successful for:", user.email ?? "No email")
             
             self.firebaseUID = user.uid
-            self.authenticatedEmail = user.email
+            self.authenticatedEmail = user.email ?? appleIDCredential.email
             
-            if let fullName = appleIDCredential.fullName {
-                let name = [fullName.givenName, fullName.familyName]
-                    .compactMap { $0 }
-                    .joined(separator: " ")
-                self.authenticatedName = name.isEmpty ? nil : name
+            // Priority for name:
+            // 1. Name from Apple credential (first sign-in)
+            // 2. Name stored in UserDefaults (returning users)
+            // 3. Firebase displayName (if previously set)
+            if let name = extractedName, !name.isEmpty {
+                self.authenticatedName = name
+            } else if let displayName = user.displayName, !displayName.isEmpty {
+                self.authenticatedName = displayName
+            } else {
+                // No name available - user will enter it in ProfileSetupView
+                self.authenticatedName = nil
             }
+            
+            print("Final authenticated name: \(self.authenticatedName ?? "nil")")
             
             self.checkExistingProfile(uid: user.uid)
         }
@@ -738,7 +1018,7 @@ final class AuthManager: ObservableObject {
     
     func handleGoogleSignIn() {
         guard let clientID = FirebaseApp.app()?.options.clientID else {
-            print("❌ No Firebase client ID found")
+            print("No Firebase client ID found")
             return
         }
         
@@ -747,7 +1027,7 @@ final class AuthManager: ObservableObject {
         
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
-            print("❌ No root view controller found")
+            print("No root view controller found")
             return
         }
         
@@ -755,13 +1035,13 @@ final class AuthManager: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Google Sign In error:", error.localizedDescription)
+                print("Google Sign In error:", error.localizedDescription)
                 return
             }
             
             guard let user = result?.user,
                   let idToken = user.idToken?.tokenString else {
-                print("❌ No user or ID token")
+                print("No user or ID token")
                 return
             }
             
@@ -774,13 +1054,13 @@ final class AuthManager: ObservableObject {
                 guard let self = self else { return }
                 
                 if let error = error {
-                    print("❌ Firebase Google auth error:", error.localizedDescription)
+                    print("Firebase Google auth error:", error.localizedDescription)
                     return
                 }
                 
                 guard let firebaseUser = authResult?.user else { return }
                 
-                print("✅ Google Sign In successful for:", firebaseUser.email ?? "No email")
+                print("Google Sign In successful for:", firebaseUser.email ?? "No email")
                 
                 self.firebaseUID = firebaseUser.uid
                 self.authenticatedEmail = firebaseUser.email

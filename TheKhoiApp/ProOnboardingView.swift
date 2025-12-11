@@ -174,6 +174,16 @@ struct ProOnboardingView: View {
             } else {
                 // Update user's pending status
                 authManager.setPendingProStatus(true)
+                
+                // Send notification about application submission
+                NotificationService.shared.sendProApplicationStatusNotification(
+                    status: "pending",
+                    businessName: application.businessName
+                )
+                
+                // Start listening for status changes
+                NotificationService.shared.listenForProApplicationStatus(userId: application.userId)
+                
                 showSuccessAlert = true
             }
         }

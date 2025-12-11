@@ -36,6 +36,12 @@ class BookingService: ObservableObject {
                 self?.errorMessage = error.localizedDescription
                 completion(.failure(error))
             } else {
+                // Schedule appointment reminders for the client
+                NotificationService.shared.scheduleAppointmentReminders(for: appointmentData)
+                
+                // Notify the pro about new booking request
+                NotificationService.shared.sendNewBookingRequestNotification(appointment: appointmentData)
+                
                 completion(.success(docRef.documentID))
             }
         }
@@ -198,10 +204,23 @@ class BookingService: ObservableObject {
             break
         }
         
-        db.collection("appointments").document(appointmentId).updateData(updateData) { error in
+        db.collection("appointments").document(appointmentId).updateData(updateData) { [weak self] error in
             if let error = error {
                 completion(.failure(error))
             } else {
+                // Fetch the full appointment to send notifications
+                self?.db.collection("appointments").document(appointmentId).getDocument { snapshot, _ in
+                    if let appointment = snapshot.flatMap({ Appointment.fromFirestore(document: $0) }) {
+                        switch status {
+                        case .confirmed:
+                            NotificationService.shared.sendBookingConfirmedNotification(appointment: appointment)
+                        case .cancelled:
+                            NotificationService.shared.sendBookingCancelledNotification(appointment: appointment, reason: nil)
+                        default:
+                            break
+                        }
+                    }
+                }
                 completion(.success(()))
             }
         }
@@ -221,11 +240,27 @@ class BookingService: ObservableObject {
             "updatedAt": Timestamp(date: Date())
         ]
         
-        db.collection("appointments").document(appointmentId).updateData(updateData) { error in
-            if let error = error {
-                completion(.failure(error))
-            } else {
-                completion(.success(()))
+        // First fetch the appointment for notification
+        db.collection("appointments").document(appointmentId).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
+            
+            let appointment = snapshot.flatMap { Appointment.fromFirestore(document: $0) }
+            
+            self.db.collection("appointments").document(appointmentId).updateData(updateData) { error in
+                if let error = error {
+                    completion(.failure(error))
+                } else {
+                    // Send cancellation notification
+                    if let appointment = appointment {
+                        NotificationService.shared.sendBookingCancelledNotification(
+                            appointment: appointment,
+                            reason: reason
+                        )
+                        // Cancel any scheduled reminders
+                        NotificationService.shared.cancelAppointmentReminders(appointmentId: appointmentId)
+                    }
+                    completion(.success(()))
+                }
             }
         }
     }

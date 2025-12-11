@@ -473,6 +473,7 @@ struct ProfileSetupView: View {
         authManager.finishProfileSetup(
             username: username.trimmingCharacters(in: .whitespaces),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
+            fullName: fullName.trimmingCharacters(in: .whitespaces),
             password: password
         ) { success, error in
             isSubmitting = false
