@@ -382,35 +382,99 @@ struct PostDetailView: View {
 
 struct CommentRow: View {
     let comment: Comment
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @State private var loadFailed = false
+    
+    // Check if we have a valid profile image URL
+    private var hasValidProfileImage: Bool {
+        guard let url = comment.authorProfileImageURL, !url.isEmpty else {
+            return false
+        }
+        return true
+    }
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // Author avatar
-            AsyncImage(url: URL(string: comment.authorProfileImageURL ?? "")) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Circle()
-                    .fill(Color.gray.opacity(0.2))
+            if hasValidProfileImage, let urlString = comment.authorProfileImageURL {
+                Group {
+                    if let image = loadedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else if loadFailed {
+                        initialAvatar
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                            )
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
+                .onAppear {
+                    loadImage(from: urlString)
+                }
+            } else {
+                initialAvatar
             }
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
             
             // Comment content
             VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(comment.authorName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text(comment.timeAgo)
+                        .font(.system(size: 11))
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                
                 Text(comment.text)
                     .font(.system(size: 14))
                     .foregroundColor(KHOIColors.darkText)
                     .lineSpacing(2)
-                
-                Text(comment.timeAgo)
-                    .font(.system(size: 11))
-                    .foregroundColor(KHOIColors.mutedText)
             }
             
             Spacer()
         }
+    }
+    
+    // Default avatar with initial
+    private var initialAvatar: some View {
+        Circle()
+            .fill(KHOIColors.accentBrown.opacity(0.2))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Text(String(comment.authorName.prefix(1)).uppercased())
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(KHOIColors.accentBrown)
+            )
+    }
+    
+    // Manual image loading with URLSession
+    private func loadImage(from urlString: String) {
+        guard let url = URL(string: urlString) else {
+            loadFailed = true
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                if let data = data, let uiImage = UIImage(data: data) {
+                    self.loadedImage = uiImage
+                } else {
+                    print("❌ Failed to load image: \(error?.localizedDescription ?? "Unknown error")")
+                    self.loadFailed = true
+                }
+                self.isLoading = false
+            }
+        }.resume()
     }
 }
 

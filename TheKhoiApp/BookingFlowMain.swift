@@ -67,12 +67,7 @@ struct BookingFlowView: View {
                 .foregroundColor(KHOIColors.darkText)
             
             Spacer()
-            
-            // Message icon placeholder
-            Image(systemName: "message")
-                .font(.system(size: 18))
-                .foregroundColor(KHOIColors.darkText)
-                .opacity(0.5)
+
         }
         .padding()
         .background(KHOIColors.background)
