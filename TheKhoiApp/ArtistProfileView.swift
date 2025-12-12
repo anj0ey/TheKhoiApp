@@ -19,6 +19,7 @@ struct ArtistProfileView: View {
     @State private var selectedTab: String = "Posts"
     @State private var showBookingSheet = false
     @State private var isSaved = false
+    @State private var isBioExpanded = false
     
     // Chat State
     @StateObject private var chatService = ChatService()
@@ -271,10 +272,25 @@ struct ArtistProfileView: View {
             }
             
             if !artist.bio.isEmpty {
-                Text(artist.bio)
-                    .font(KHOITheme.body)
-                    .foregroundColor(KHOIColors.darkText)
-                    .lineLimit(3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(artist.bio)
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.darkText)
+                        .lineLimit(isBioExpanded ? nil : 3)
+                    
+                    // Show "view more" / "view less" if bio is long enough
+                    if artist.bio.count > 100 {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isBioExpanded.toggle()
+                            }
+                        }) {
+                            Text(isBioExpanded ? "view less" : "view more")
+                                .font(KHOITheme.caption)
+                                .foregroundColor(KHOIColors.mutedText)
+                        }
+                    }
+                }
             }
             
             // Stats

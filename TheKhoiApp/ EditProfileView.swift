@@ -389,134 +389,153 @@ struct ImageCropperView: View {
     // Store the UIImage representation to avoid recreating it
     @State private var displayImage: Image?
     
+    // Safe area for proper button positioning
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
+    
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            let safeTop = geometry.safeAreaInsets.top
+            let safeBottom = geometry.safeAreaInsets.bottom
+            let headerHeight: CGFloat = 60
+            let footerHeight: CGFloat = 70
             
-            VStack(spacing: 0) {
-                // Header
-                headerView
+            ZStack {
+                // Background
+                Color.black.ignoresSafeArea()
                 
-                // Crop area
-                GeometryReader { cropGeometry in
-                    ZStack {
-                        // Dimmed overlay
-                        Color.black.opacity(0.5)
-                        
-                        // Calculate crop dimensions
-                        let cropWidth = cropGeometry.size.width - 40
-                        let cropHeight = cropWidth / aspectRatio
-                        
-                        // Image - Use cached Image view
-                        Group {
-                            if let displayImage = displayImage {
-                                displayImage
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } else {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            }
+                // MARK: - Crop Area (Middle section)
+                let availableHeight = geometry.size.height - headerHeight - footerHeight
+                let cropWidth = geometry.size.width - 40
+                let cropHeight = min(cropWidth / aspectRatio, availableHeight - 40)
+                
+                // Image layer - only in the middle area
+                ZStack {
+                    // Dimmed background
+                    Color.black.opacity(0.5)
+                    
+                    // The draggable/zoomable image
+                    Group {
+                        if let displayImage = displayImage {
+                            displayImage
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } else {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
                         }
-                        .scaleEffect(scale)
-                        .offset(offset)
-                        .gesture(
-                            MagnificationGesture()
-                                .onChanged { value in
-                                    let delta = value / lastScale
-                                    lastScale = value
-                                    scale = min(max(scale * delta, 1.0), 4.0)
-                                }
-                                .onEnded { _ in
-                                    lastScale = 1.0
-                                }
-                        )
-                        .simultaneousGesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    offset = CGSize(
-                                        width: lastOffset.width + value.translation.width,
-                                        height: lastOffset.height + value.translation.height
-                                    )
-                                }
-                                .onEnded { _ in
-                                    lastOffset = offset
-                                }
-                        )
-                        
-                        // Crop frame overlay
-                        Rectangle()
-                            .strokeBorder(Color.white, lineWidth: 2)
-                            .frame(width: cropWidth, height: cropHeight)
-                            .allowsHitTesting(false)
-                        
-                        // Corner handles
-                        VStack {
-                            HStack {
-                                cornerHandle()
-                                Spacer()
-                                cornerHandle()
+                    }
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let delta = value / lastScale
+                                lastScale = value
+                                scale = min(max(scale * delta, 1.0), 4.0)
                             }
-                            Spacer()
-                            HStack {
-                                cornerHandle()
-                                Spacer()
-                                cornerHandle()
+                            .onEnded { _ in
+                                lastScale = 1.0
                             }
-                        }
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                offset = CGSize(
+                                    width: lastOffset.width + value.translation.width,
+                                    height: lastOffset.height + value.translation.height
+                                )
+                            }
+                            .onEnded { _ in
+                                lastOffset = offset
+                            }
+                    )
+                    
+                    // Crop frame overlay (non-interactive)
+                    Rectangle()
+                        .strokeBorder(Color.white, lineWidth: 2)
                         .frame(width: cropWidth, height: cropHeight)
                         .allowsHitTesting(false)
+                    
+                    // Corner handles (non-interactive)
+                    VStack {
+                        HStack {
+                            cornerHandle()
+                            Spacer()
+                            cornerHandle()
+                        }
+                        Spacer()
+                        HStack {
+                            cornerHandle()
+                            Spacer()
+                            cornerHandle()
+                        }
                     }
+                    .frame(width: cropWidth, height: cropHeight)
+                    .allowsHitTesting(false)
                 }
+                .frame(width: geometry.size.width, height: availableHeight)
+                .position(x: geometry.size.width / 2, y: safeTop + headerHeight + availableHeight / 2)
                 
-                // Instructions
-                footerView
+                // MARK: - Fixed Header (Top)
+                VStack {
+                    HStack {
+                        Button(action: { onCancel() }) {
+                            Text("Cancel")
+                                .font(KHOITheme.body)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Spacer()
+                        
+                        Text("Adjust Photo")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Button(action: { cropImage(geometry: geometry) }) {
+                            Text("Done")
+                                .font(KHOITheme.bodyBold)
+                                .foregroundColor(KHOIColors.accentBrown)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .frame(height: headerHeight)
+                    .background(Color.black)
+                    
+                    Spacer()
+                }
+                .ignoresSafeArea()
+                .padding(.top, safeTop)
+                
+                // MARK: - Fixed Footer (Bottom)
+                VStack {
+                    Spacer()
+                    
+                    Text("Pinch to zoom • Drag to reposition")
+                        .font(KHOITheme.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(height: footerHeight)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black)
+                        .padding(.bottom, safeBottom)
+                }
+                .ignoresSafeArea()
             }
         }
+        .ignoresSafeArea()
         .onAppear {
-            // Cache the Image view once on appear
             displayImage = Image(uiImage: image)
         }
-    }
-    
-    private var headerView: some View {
-        HStack {
-            Button("Cancel") {
-                onCancel()
-            }
-            .font(KHOITheme.body)
-            .foregroundColor(.white)
-            
-            Spacer()
-            
-            Text("Adjust Photo")
-                .font(KHOITheme.headline)
-                .foregroundColor(.white)
-            
-            Spacer()
-            
-            Button("Done") {
-                cropImage()
-            }
-            .font(KHOITheme.bodyBold)
-            .foregroundColor(KHOIColors.accentBrown)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 70)
-        .padding(.bottom, 16)
-        .background(Color.black)
-        .frame(maxWidth: .infinity)
-    }
-    
-    private var footerView: some View {
-        Text("Pinch to zoom • Drag to reposition")
-            .font(KHOITheme.caption)
-            .foregroundColor(.white.opacity(0.7))
-            .padding(.vertical, 20)
-            .padding(.bottom, 20)
-            .frame(maxWidth: .infinity)
-            .background(Color.black)
     }
     
     private func cornerHandle() -> some View {
@@ -525,49 +544,40 @@ struct ImageCropperView: View {
             .frame(width: 20, height: 20)
     }
     
-    private func cropImage() {
-        // Use a rendering-based approach for more accurate cropping
-        let screenWidth = UIScreen.main.bounds.width
+    private func cropImage(geometry: GeometryProxy) {
+        let screenWidth = geometry.size.width
         let cropWidth = screenWidth - 40
         let cropHeight = cropWidth / aspectRatio
         
         // Final output size
         let outputSize = CGSize(width: 1200, height: 1200 / aspectRatio)
         
-        // Create a renderer with the output size
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
         
         let croppedImage = renderer.image { context in
-            // Calculate how the image is displayed in the crop area
             let imageSize = image.size
             let imageAspect = imageSize.width / imageSize.height
             let cropAspect = cropWidth / cropHeight
             
-            // Determine the displayed image size
             var displayedWidth: CGFloat
             var displayedHeight: CGFloat
             
             if imageAspect > cropAspect {
-                // Image is wider than crop area
                 displayedHeight = cropHeight
                 displayedWidth = displayedHeight * imageAspect
             } else {
-                // Image is taller than crop area
                 displayedWidth = cropWidth
                 displayedHeight = displayedWidth / imageAspect
             }
             
-            // Apply scale
             displayedWidth *= scale
             displayedHeight *= scale
             
-            // Calculate the draw position (centered, then offset by user's pan)
             let drawX = (cropWidth - displayedWidth) / 2 + offset.width
             let drawY = (cropHeight - displayedHeight) / 2 + offset.height
             
-            // Scale to output size
             let scaleToOutput = outputSize.width / cropWidth
             let finalDrawRect = CGRect(
                 x: drawX * scaleToOutput,
@@ -576,21 +586,22 @@ struct ImageCropperView: View {
                 height: displayedHeight * scaleToOutput
             )
             
-            // Draw the image
             image.draw(in: finalDrawRect)
         }
         
         onCrop(croppedImage)
     }
-    
-    private func resizeImage(_ image: UIImage, to size: CGSize) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
+}
+
+// MARK: - Safe Area Insets Environment
+private struct SafeAreaInsetsKey: EnvironmentKey {
+    static var defaultValue: EdgeInsets = EdgeInsets()
+}
+
+extension EnvironmentValues {
+    var safeAreaInsets: EdgeInsets {
+        get { self[SafeAreaInsetsKey.self] }
+        set { self[SafeAreaInsetsKey.self] = newValue }
     }
 }
 
@@ -632,4 +643,3 @@ struct EditProfileField: View {
             .environmentObject(AuthManager())
     }
 }
-
