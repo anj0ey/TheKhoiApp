@@ -509,13 +509,13 @@ struct ImageCropperView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 20)
-                    .frame(height: headerHeight)
+                    .padding(.top, safeTop + 40)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity)
                     .background(Color.black)
                     
                     Spacer()
                 }
-                .ignoresSafeArea()
-                .padding(.top, safeTop)
                 
                 // MARK: - Fixed Footer (Bottom)
                 VStack {
