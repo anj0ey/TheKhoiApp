@@ -18,7 +18,7 @@ struct DiscoverView: View {
     @StateObject private var searchService = SearchService()
     @State private var savedPostIDs: Set<String> = []
 
-    private let categories = ["All", "Skin", "Nails", "Makeup", "Lashes", "Hair", "Brows", "Body"]
+    private let categories = ["All", "Skin", "Nails", "Makeup", "Lash", "Hair", "Brows", "Body"]
     
     var body: some View {
         NavigationStack {

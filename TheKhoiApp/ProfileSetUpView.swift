@@ -5,6 +5,7 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct ProfileSetupView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -18,6 +19,19 @@ struct ProfileSetupView: View {
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     
+    // Photo states
+    @State private var selectedProfileItem: PhotosPickerItem? = nil
+    @State private var selectedCoverItem: PhotosPickerItem? = nil
+    @State private var profileImage: UIImage? = nil
+    @State private var coverImage: UIImage? = nil
+    @State private var isLoadingImage = false
+    
+    // Cropper states
+    @State private var showProfileCropper = false
+    @State private var showCoverCropper = false
+    @State private var tempProfileImage: UIImage? = nil
+    @State private var tempCoverImage: UIImage? = nil
+    
     @State private var errorMessage: String?
     @State private var isSubmitting: Bool = false
     @State private var showLogoutConfirmation: Bool = false
@@ -26,6 +40,7 @@ struct ProfileSetupView: View {
         case welcome
         case accountInfo
         case profile
+        case photos
         case security
     }
     
@@ -51,6 +66,8 @@ struct ProfileSetupView: View {
                             accountInfoStep
                         case .profile:
                             profileStep
+                        case .photos:
+                            photosStep
                         case .security:
                             securityStep
                         }
@@ -65,6 +82,21 @@ struct ProfileSetupView: View {
                 // Bottom action button
                 bottomButton
             }
+            
+            // Loading overlay for images
+            if isLoadingImage {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.5)
+                        Text("Loading image...")
+                            .font(KHOITheme.body)
+                            .foregroundColor(.white)
+                    }
+                }
+            }
         }
         .navigationBarHidden(true)
         .alert("Cancel Setup?", isPresented: $showLogoutConfirmation) {
@@ -78,6 +110,104 @@ struct ProfileSetupView: View {
         .onAppear {
             fullName = authManager.authenticatedName ?? ""
             email = authManager.authenticatedEmail ?? ""
+        }
+        .onChange(of: selectedProfileItem) { _, newItem in
+            Task {
+                if let newItem = newItem {
+                    isLoadingImage = true
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let originalImage = UIImage(data: data) {
+                        let resized = resizeImage(originalImage, maxDimension: 1500)
+                        await MainActor.run {
+                            tempProfileImage = resized
+                            isLoadingImage = false
+                            showProfileCropper = true
+                        }
+                    } else {
+                        await MainActor.run {
+                            isLoadingImage = false
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: selectedCoverItem) { _, newItem in
+            Task {
+                if let newItem = newItem {
+                    isLoadingImage = true
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let originalImage = UIImage(data: data) {
+                        let resized = resizeImage(originalImage, maxDimension: 1500)
+                        await MainActor.run {
+                            tempCoverImage = resized
+                            isLoadingImage = false
+                            showCoverCropper = true
+                        }
+                    } else {
+                        await MainActor.run {
+                            isLoadingImage = false
+                        }
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showProfileCropper) {
+            if let image = tempProfileImage {
+                SetupImageCropperView(
+                    image: image,
+                    aspectRatio: 1.0,
+                    onCrop: { croppedImage in
+                        profileImage = croppedImage
+                        showProfileCropper = false
+                        tempProfileImage = nil
+                        selectedProfileItem = nil
+                    },
+                    onCancel: {
+                        showProfileCropper = false
+                        tempProfileImage = nil
+                        selectedProfileItem = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+        }
+        .fullScreenCover(isPresented: $showCoverCropper) {
+            if let image = tempCoverImage {
+                SetupImageCropperView(
+                    image: image,
+                    aspectRatio: 3.0,
+                    onCrop: { croppedImage in
+                        coverImage = croppedImage
+                        showCoverCropper = false
+                        tempCoverImage = nil
+                        selectedCoverItem = nil
+                    },
+                    onCancel: {
+                        showCoverCropper = false
+                        tempCoverImage = nil
+                        selectedCoverItem = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+        }
+    }
+    
+    // MARK: - Helper: Resize Image
+    private func resizeImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let maxSize = max(size.width, size.height)
+        
+        if maxSize <= maxDimension {
+            return image
+        }
+        
+        let scale = maxDimension / maxSize
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
     
@@ -113,7 +243,7 @@ struct ProfileSetupView: View {
     // MARK: - Progress Bar
     private var progressBar: some View {
         HStack(spacing: 8) {
-            ForEach(0..<3) { index in
+            ForEach(0..<4) { index in
                 Rectangle()
                     .fill(index < stepNumber ? KHOIColors.accentBrown : KHOIColors.chipBackground)
                     .frame(height: 4)
@@ -129,7 +259,8 @@ struct ProfileSetupView: View {
         case .welcome: return 0
         case .accountInfo: return 1
         case .profile: return 2
-        case .security: return 3
+        case .photos: return 3
+        case .security: return 4
         }
     }
     
@@ -249,7 +380,7 @@ struct ProfileSetupView: View {
                         if bio.isEmpty {
                             Text("Tell us about yourself...")
                                 .font(KHOITheme.body)
-                                .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                                .foregroundColor(KHOIColors.mutedText.opacity(0.6))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 14)
                         }
@@ -257,7 +388,7 @@ struct ProfileSetupView: View {
                         TextEditor(text: $bio)
                             .font(KHOITheme.body)
                             .foregroundColor(KHOIColors.darkText)
-                            .frame(minHeight: 120)
+                            .frame(minHeight: 100)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
                             .scrollContentBackground(.hidden)
@@ -281,6 +412,137 @@ struct ProfileSetupView: View {
         }
     }
     
+    // MARK: - Photos Step
+    private var photosStep: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Add Your Photos")
+                    .font(KHOITheme.title)
+                    .foregroundColor(KHOIColors.darkText)
+                
+                Text("Add a profile picture and cover photo. You can skip this and add them later.")
+                    .font(KHOITheme.callout)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            
+            // Preview card showing how profile will look
+            VStack(spacing: 0) {
+                // Cover image
+                ZStack(alignment: .bottomTrailing) {
+                    if let coverImage = coverImage {
+                        Image(uiImage: coverImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 120)
+                            .clipped()
+                    } else {
+                        LinearGradient(
+                            colors: [Color(hex: "8B4D5C"), Color(hex: "C4A07C")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .frame(height: 120)
+                    }
+                    
+                    // Edit cover button
+                    PhotosPicker(selection: $selectedCoverItem, matching: .images) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 12))
+                            Text("Edit")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(16)
+                    }
+                    .padding(12)
+                }
+                .cornerRadius(16, corners: [.topLeft, .topRight])
+                
+                // Profile picture overlapping
+                HStack {
+                    ZStack(alignment: .bottomTrailing) {
+                        if let profileImage = profileImage {
+                            Image(uiImage: profileImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(KHOIColors.background, lineWidth: 4)
+                                )
+                        } else {
+                            Circle()
+                                .fill(KHOIColors.chipBackground)
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(KHOIColors.mutedText)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(KHOIColors.background, lineWidth: 4)
+                                )
+                        }
+                        
+                        // Edit profile picture button
+                        PhotosPicker(selection: $selectedProfileItem, matching: .images) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.white)
+                                .padding(6)
+                                .background(KHOIColors.accentBrown)
+                                .clipShape(Circle())
+                        }
+                        .offset(x: 4, y: 4)
+                    }
+                    .offset(y: -40)
+                    .padding(.leading, 16)
+                    
+                    Spacer()
+                }
+                .padding(.bottom, -32)
+                
+                // Name preview
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(fullName.isEmpty ? "Your Name" : fullName)
+                        .font(KHOITheme.headline)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text("@\(username.isEmpty ? "username" : username)")
+                        .font(KHOITheme.callout)
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 48)
+                .padding(.bottom, 16)
+            }
+            .background(KHOIColors.cardBackground)
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+            
+            // Helper text
+            HStack(spacing: 8) {
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(KHOIColors.accentBrown)
+                
+                Text("Tip: Profiles with photos get more engagement!")
+                    .font(KHOITheme.caption)
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            .padding(.top, 8)
+            
+            Spacer()
+        }
+    }
+    
     // MARK: - Security Step
     private var securityStep: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -289,7 +551,7 @@ struct ProfileSetupView: View {
                     .font(KHOITheme.title)
                     .foregroundColor(KHOIColors.darkText)
                 
-                Text("Create a password for your account. Make it strong!")
+                Text("Create a strong password to protect your account.")
                     .font(KHOITheme.callout)
                     .foregroundColor(KHOIColors.mutedText)
             }
@@ -298,32 +560,41 @@ struct ProfileSetupView: View {
                 StyledSecureField(
                     label: "Password",
                     text: $password,
-                    placeholder: "At least 6 characters",
+                    placeholder: "Create a password",
                     icon: "lock"
-                )
-                
-                StyledSecureField(
-                    label: "Confirm Password",
-                    text: $confirmPassword,
-                    placeholder: "Re-enter password",
-                    icon: "lock.fill"
                 )
                 
                 // Password strength indicator
                 if !password.isEmpty {
-                    HStack(spacing: 8) {
-                        ForEach(0..<4) { index in
-                            Rectangle()
-                                .fill(index < passwordStrength ? strengthColor : KHOIColors.chipBackground)
-                                .frame(height: 4)
-                                .cornerRadius(2)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 4) {
+                            ForEach(0..<4) { index in
+                                Rectangle()
+                                    .fill(index < passwordStrength ? strengthColor : KHOIColors.chipBackground)
+                                    .frame(height: 4)
+                                    .cornerRadius(2)
+                            }
                         }
+                        
+                        Text("Password strength: \(strengthText)")
+                            .font(KHOITheme.caption)
+                            .foregroundColor(strengthColor)
                     }
-                    
-                    Text(strengthText)
-                        .font(KHOITheme.caption)
-                        .foregroundColor(strengthColor)
                 }
+                
+                StyledSecureField(
+                    label: "Confirm Password",
+                    text: $confirmPassword,
+                    placeholder: "Confirm your password",
+                    icon: "lock.fill"
+                )
+                
+                // Password requirements
+                VStack(alignment: .leading, spacing: 8) {
+                    PasswordRequirement(text: "At least 6 characters", met: password.count >= 6)
+                    PasswordRequirement(text: "Passwords match", met: !confirmPassword.isEmpty && password == confirmPassword)
+                }
+                .padding(.top, 8)
             }
             
             if let errorMessage = errorMessage {
@@ -372,6 +643,7 @@ struct ProfileSetupView: View {
         case .welcome: return "Get Started"
         case .accountInfo: return "Continue"
         case .profile: return "Continue"
+        case .photos: return profileImage == nil && coverImage == nil ? "Skip for Now" : "Continue"
         case .security: return isSubmitting ? "Creating Account..." : "Complete Setup"
         }
     }
@@ -381,6 +653,7 @@ struct ProfileSetupView: View {
         case .welcome: return true
         case .accountInfo: return !fullName.trimmingCharacters(in: .whitespaces).isEmpty
         case .profile: return !username.trimmingCharacters(in: .whitespaces).isEmpty
+        case .photos: return true // Always enabled, can skip
         case .security: return password.count >= 6 && password == confirmPassword
         }
     }
@@ -434,6 +707,10 @@ struct ProfileSetupView: View {
                 return
             }
             withAnimation {
+                currentStep = .photos
+            }
+        case .photos:
+            withAnimation {
                 currentStep = .security
             }
         case .security:
@@ -449,8 +726,10 @@ struct ProfileSetupView: View {
                 currentStep = .welcome
             case .profile:
                 currentStep = .accountInfo
-            case .security:
+            case .photos:
                 currentStep = .profile
+            case .security:
+                currentStep = .photos
             case .welcome:
                 break
             }
@@ -474,13 +753,33 @@ struct ProfileSetupView: View {
             username: username.trimmingCharacters(in: .whitespaces),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
             fullName: fullName.trimmingCharacters(in: .whitespaces),
-            password: password
+            password: password,
+            profileImage: profileImage,
+            coverImage: coverImage
         ) { success, error in
             isSubmitting = false
             
             if !success {
                 errorMessage = error ?? "Something went wrong. Please try again."
             }
+        }
+    }
+}
+
+// MARK: - Password Requirement Row
+struct PasswordRequirement: View {
+    let text: String
+    let met: Bool
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: met ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 14))
+                .foregroundColor(met ? .green : KHOIColors.mutedText)
+            
+            Text(text)
+                .font(KHOITheme.caption)
+                .foregroundColor(met ? KHOIColors.darkText : KHOIColors.mutedText)
         }
     }
 }
@@ -573,6 +872,208 @@ struct StyledSecureField: View {
                         .stroke(KHOIColors.divider, lineWidth: 1)
                 )
         }
+    }
+}
+
+// MARK: - Corner Radius Extension
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+
+// MARK: - Setup Image Cropper View
+struct SetupImageCropperView: View {
+    let image: UIImage
+    let aspectRatio: CGFloat
+    let onCrop: (UIImage) -> Void
+    let onCancel: () -> Void
+    
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var displayImage: Image?
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let safeTop = geometry.safeAreaInsets.top
+            let safeBottom = geometry.safeAreaInsets.bottom
+            let headerHeight: CGFloat = 60
+            let footerHeight: CGFloat = 70
+            
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                let availableHeight = geometry.size.height - headerHeight - footerHeight
+                let cropWidth = geometry.size.width - 40
+                let cropHeight = min(cropWidth / aspectRatio, availableHeight - 40)
+                
+                // Image layer
+                ZStack {
+                    Color.black.opacity(0.5)
+                    
+                    Group {
+                        if let displayImage = displayImage {
+                            displayImage
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } else {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        }
+                    }
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let delta = value / lastScale
+                                lastScale = value
+                                scale = min(max(scale * delta, 1.0), 4.0)
+                            }
+                            .onEnded { _ in
+                                lastScale = 1.0
+                            }
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                offset = CGSize(
+                                    width: lastOffset.width + value.translation.width,
+                                    height: lastOffset.height + value.translation.height
+                                )
+                            }
+                            .onEnded { _ in
+                                lastOffset = offset
+                            }
+                    )
+                    
+                    Rectangle()
+                        .strokeBorder(Color.white, lineWidth: 2)
+                        .frame(width: cropWidth, height: cropHeight)
+                        .allowsHitTesting(false)
+                }
+                .frame(width: geometry.size.width, height: availableHeight)
+                .position(x: geometry.size.width / 2, y: safeTop + headerHeight + availableHeight / 2)
+                
+                // Header
+                VStack {
+                    HStack {
+                        Button(action: { onCancel() }) {
+                            Text("Cancel")
+                                .font(KHOITheme.body)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Spacer()
+                        
+                        Text("Adjust Photo")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Button(action: { cropImage(geometry: geometry) }) {
+                            Text("Done")
+                                .font(KHOITheme.bodyBold)
+                                .foregroundColor(KHOIColors.accentBrown)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, safeTop + 10)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black)
+                    
+                    Spacer()
+                }
+                
+                // Footer
+                VStack {
+                    Spacer()
+                    
+                    Text("Pinch to zoom • Drag to reposition")
+                        .font(KHOITheme.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(height: footerHeight)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black)
+                        .padding(.bottom, safeBottom)
+                }
+                .ignoresSafeArea()
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            displayImage = Image(uiImage: image)
+        }
+    }
+    
+    private func cropImage(geometry: GeometryProxy) {
+        let screenWidth = geometry.size.width
+        let cropWidth = screenWidth - 40
+        let cropHeight = cropWidth / aspectRatio
+        
+        let outputSize = CGSize(width: 1200, height: 1200 / aspectRatio)
+        
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
+        
+        let croppedImage = renderer.image { context in
+            let imageSize = image.size
+            let imageAspect = imageSize.width / imageSize.height
+            let cropAspect = cropWidth / cropHeight
+            
+            var displayedWidth: CGFloat
+            var displayedHeight: CGFloat
+            
+            if imageAspect > cropAspect {
+                displayedHeight = cropHeight
+                displayedWidth = displayedHeight * imageAspect
+            } else {
+                displayedWidth = cropWidth
+                displayedHeight = displayedWidth / imageAspect
+            }
+            
+            displayedWidth *= scale
+            displayedHeight *= scale
+            
+            let drawX = (cropWidth - displayedWidth) / 2 + offset.width
+            let drawY = (cropHeight - displayedHeight) / 2 + offset.height
+            
+            let scaleToOutput = outputSize.width / cropWidth
+            let finalDrawRect = CGRect(
+                x: drawX * scaleToOutput,
+                y: drawY * scaleToOutput,
+                width: displayedWidth * scaleToOutput,
+                height: displayedHeight * scaleToOutput
+            )
+            
+            image.draw(in: finalDrawRect)
+        }
+        
+        onCrop(croppedImage)
     }
 }
 

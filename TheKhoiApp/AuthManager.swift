@@ -261,26 +261,29 @@ final class AuthManager: ObservableObject {
         
         let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
         
-        // First check Firebase Auth if this email exists
-        Auth.auth().fetchSignInMethods(forEmail: trimmedEmail) { [weak self] methods, error in
-            DispatchQueue.main.async {
-                self?.isEmailLoading = false
-                
-                if let error = error {
-                    print("Error checking email: \(error.localizedDescription)")
-                    self?.emailAuthError = "Error checking email. Please try again."
-                    completion(false, false)
-                    return
+        // Check Firestore users collection for existing user
+        // (fetchSignInMethods is deprecated and returns empty due to Email Enumeration Protection)
+        db.collection("users")
+            .whereField("email", isEqualTo: trimmedEmail)
+            .getDocuments { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    self?.isEmailLoading = false
+                    
+                    if let error = error {
+                        print("Error checking email: \(error.localizedDescription)")
+                        self?.emailAuthError = "Error checking email. Please try again."
+                        completion(false, false)
+                        return
+                    }
+                    
+                    // If we found a user document, they exist
+                    let userExists = !(snapshot?.documents.isEmpty ?? true)
+                    self?.authenticatedEmail = trimmedEmail
+                    
+                    print(userExists ? "✅ Existing user found in Firestore" : "ℹ️ New user, not in Firestore")
+                    completion(true, userExists)
                 }
-                
-                // If methods is not empty, user exists
-                let userExists = !(methods?.isEmpty ?? true)
-                self?.authenticatedEmail = trimmedEmail
-                
-                print(userExists ? "Existing user found" : "ℹ️ New user")
-                completion(true, userExists)
             }
-        }
     }
     
     // MARK: - Start New User Profile Setup (without Firebase account yet)
@@ -460,7 +463,7 @@ final class AuthManager: ObservableObject {
         checkExistingProfile(uid: uid)
     }
     
-    func finishProfileSetup(username: String, bio: String, fullName: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+    func finishProfileSetup(username: String, bio: String, fullName: String, password: String, profileImage: UIImage? = nil, coverImage: UIImage? = nil, completion: @escaping (Bool, String?) -> Void) {
         print("Starting profile setup for:", username)
         
         // If we don't have a Firebase UID yet, we need to create the account first
@@ -514,6 +517,8 @@ final class AuthManager: ObservableObject {
                     username: username,
                     bio: bio,
                     fullName: fullName,
+                    profileImage: profileImage,
+                    coverImage: coverImage,
                     completion: completion
                 )
             }
@@ -524,12 +529,14 @@ final class AuthManager: ObservableObject {
                 username: username,
                 bio: bio,
                 fullName: fullName,
+                profileImage: profileImage,
+                coverImage: coverImage,
                 completion: completion
             )
         }
     }
     
-    private func saveProfileToFirestore(uid: String, username: String, bio: String, fullName: String, completion: @escaping (Bool, String?) -> Void) {
+    private func saveProfileToFirestore(uid: String, username: String, bio: String, fullName: String, profileImage: UIImage? = nil, coverImage: UIImage? = nil, completion: @escaping (Bool, String?) -> Void) {
         let user = UserProfile(
             id: uid,
             fullName: fullName,
@@ -570,6 +577,15 @@ final class AuthManager: ObservableObject {
                 self.authenticatedName = fullName
                 self.saveUser(user)
                 self.completeOnboarding()
+                
+                // Upload images in background if provided
+                if let profileImage = profileImage {
+                    self.uploadProfileImage(profileImage) { _ in }
+                }
+                if let coverImage = coverImage {
+                    self.uploadCoverImage(coverImage) { _ in }
+                }
+                
                 completion(true, nil)
             }
         }
@@ -917,6 +933,94 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "hasPendingProApplication")
         
         print("🚪 User fully signed out")
+    }
+    
+    // MARK: - Delete Account
+    
+    func deleteAccount(completion: @escaping (Bool, String?) -> Void) {
+        guard let user = Auth.auth().currentUser,
+              let uid = firebaseUID else {
+            completion(false, "No user logged in")
+            return
+        }
+        
+        let batch = db.batch()
+        
+        // 1. Delete user document from Firestore
+        let userRef = db.collection("users").document(uid)
+        batch.deleteDocument(userRef)
+        
+        // 2. Delete artist profile if exists
+        let artistRef = db.collection("artists").document(uid)
+        batch.deleteDocument(artistRef)
+        
+        // 3. Delete pro application if exists
+        let proAppRef = db.collection("pro_applications").document(uid)
+        batch.deleteDocument(proAppRef)
+        
+        // Commit Firestore deletions first
+        batch.commit { [weak self] error in
+            if let error = error {
+                print("❌ Error deleting Firestore data: \(error.localizedDescription)")
+                completion(false, "Failed to delete account data. Please try again.")
+                return
+            }
+            
+            print("✅ Firestore data deleted")
+            
+            // 4. Delete profile images from Storage
+            let storage = Storage.storage()
+            let profileImageRef = storage.reference().child("profile_images/\(uid).jpg")
+            let coverImageRef = storage.reference().child("cover_images/\(uid).jpg")
+            
+            // Delete images (don't fail if they don't exist)
+            profileImageRef.delete { _ in }
+            coverImageRef.delete { _ in }
+            
+            // 5. Delete Firebase Auth account
+            user.delete { [weak self] error in
+                guard let self = self else { return }
+                
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error deleting Firebase Auth account: \(error.localizedDescription)")
+                        
+                        // Check if re-authentication is required
+                        let nsError = error as NSError
+                        if nsError.code == 17014 { // Requires recent login
+                            completion(false, "For security, please log out and log back in, then try deleting your account again.")
+                        } else {
+                            completion(false, "Failed to delete account. Please try again.")
+                        }
+                        return
+                    }
+                    
+                    print("✅ Firebase Auth account deleted")
+                    
+                    // 6. Clear local data (same as logOut)
+                    self.currentUser = nil
+                    self.firebaseUID = nil
+                    self.authenticatedEmail = nil
+                    self.authenticatedName = nil
+                    self.hasBusinessProfile = false
+                    self.isBusinessMode = false
+                    self.hasPendingProApplication = false
+                    self.isOnboardingComplete = false
+                    self.needsProfileSetup = false
+                    
+                    UserDefaults.standard.removeObject(forKey: self.userKey)
+                    UserDefaults.standard.removeObject(forKey: "isOnboardingComplete")
+                    UserDefaults.standard.removeObject(forKey: "isBusinessMode")
+                    UserDefaults.standard.removeObject(forKey: "hasPendingProApplication")
+                    
+                    // Sign out of Google if applicable
+                    GIDSignIn.sharedInstance.signOut()
+                    
+                    print("🗑️ Account fully deleted")
+                    completion(true, nil)
+                }
+            }
+        }
     }
     
     // MARK: - Apple Sign In

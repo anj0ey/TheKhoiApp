@@ -12,8 +12,12 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var pushNotifications = true
-    @State private var darkMode = false
     @State private var marketingEmails = false
+    
+    // Delete account state
+    @State private var showDeleteConfirmation = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         ZStack {
@@ -104,13 +108,6 @@ struct SettingsView: View {
                                 Divider()
 
                                 SettingsToggleRow(
-                                    title: "Dark mode",
-                                    isOn: $darkMode
-                                )
-
-                                Divider()
-
-                                SettingsToggleRow(
                                     title: "Marketing emails",
                                     isOn: $marketingEmails
                                 )
@@ -176,12 +173,66 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     .padding(.top, KHOITheme.spacing_sm)
+                    
+                    // MARK: - Delete Account
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            if isDeleting {
+                                ProgressView()
+                                    .tint(KHOIColors.danger)
+                                    .scaleEffect(0.8)
+                            }
+                            Text(isDeleting ? "Deleting..." : "Delete account")
+                                .font(KHOITheme.body)
+                                .foregroundColor(KHOIColors.danger.opacity(0.8))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, KHOITheme.spacing_sm)
+                    }
+                    .disabled(isDeleting)
+                    .padding(.horizontal, KHOITheme.spacing_md)
+                    
+                    // Error message
+                    if let error = deleteError {
+                        Text(error)
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.danger)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, KHOITheme.spacing_md)
+                    }
 
                     Spacer(minLength: KHOITheme.spacing_xl)
                 }
             }
         }
         .navigationBarHidden(true)
+        .alert("Delete Account", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteAccount()
+            }
+        } message: {
+            Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.")
+        }
+    }
+    
+    // MARK: - Delete Account Action
+    
+    private func deleteAccount() {
+        isDeleting = true
+        deleteError = nil
+        
+        authManager.deleteAccount { success, error in
+            isDeleting = false
+            
+            if success {
+                dismiss()
+            } else {
+                deleteError = error
+            }
+        }
     }
 }
 
