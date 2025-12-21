@@ -2,7 +2,7 @@
 //  ChatService.swift
 //  TheKhoiApp
 //
-//  Handles all chat-related Firestore operations
+//  Handles all chat-related Firestore operations with push notifications
 //
 
 import Foundation
@@ -132,7 +132,7 @@ class ChatService: ObservableObject {
             }
     }
     
-    /// Send a message
+    /// Send a message with push notification
     func sendMessage(
         conversationId: String,
         senderId: String,
@@ -141,6 +141,10 @@ class ChatService: ObservableObject {
         otherUserId: String,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
+        //notification test log
+        print("ChatService.sendMessage called")
+        print("otherUserId: \(otherUserId)")
+        
         let message = Message(
             id: UUID().uuidString,
             conversationId: conversationId,
@@ -169,13 +173,38 @@ class ChatService: ObservableObject {
             "unreadCount.\(otherUserId)": FieldValue.increment(Int64(1))
         ], forDocument: conversationRef)
         
-        batch.commit { error in
+        batch.commit { [weak self] error in
             if let error = error {
                 completion(.failure(error))
             } else {
+                // Send push notification to recipient
+                self?.sendMessageNotification(
+                    recipientId: otherUserId,
+                    senderName: senderName,
+                    messagePreview: text,
+                    conversationId: conversationId
+                )
                 completion(.success(()))
             }
         }
+    }
+    
+    /// Send push notification for new message
+    private func sendMessageNotification(
+        recipientId: String,
+        senderName: String,
+        messagePreview: String,
+        conversationId: String
+    ) {
+        //notification test log
+        print("sendMessageNotification called for: \(recipientId)")
+        
+        NotificationService.shared.sendNewMessageNotification(
+            recipientId: recipientId,
+            senderName: senderName,
+            messagePreview: messagePreview,
+            conversationId: conversationId
+        )
     }
     
     /// Mark messages as read
@@ -185,6 +214,28 @@ class ChatService: ObservableObject {
             .updateData([
                 "unreadCount.\(userId)": 0
             ])
+    }
+    
+    /// Get total unread message count for a user
+    func getTotalUnreadCount(userId: String, completion: @escaping (Int) -> Void) {
+        db.collection("conversations")
+            .whereField("participantIds", arrayContains: userId)
+            .getDocuments { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    completion(0)
+                    return
+                }
+                
+                var totalUnread = 0
+                for doc in documents {
+                    if let unreadCount = doc.data()["unreadCount"] as? [String: Int],
+                       let count = unreadCount[userId] {
+                        totalUnread += count
+                    }
+                }
+                
+                completion(totalUnread)
+            }
     }
     
     // MARK: - Cleanup

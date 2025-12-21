@@ -2,7 +2,7 @@
 //  CommentService.swift
 //  TheKhoiApp
 //
-//  Service for managing post comments in Firebase
+//  Service for managing post comments in Firebase with push notifications
 //
 
 import Foundation
@@ -23,8 +23,6 @@ class CommentService: ObservableObject {
         
         commentsListener?.remove()
         
-        // Note: Using only whereField without orderBy to avoid needing composite index
-        // Sorting is done locally after fetching
         commentsListener = db.collection("comments")
             .whereField("postId", isEqualTo: postId)
             .addSnapshotListener { [weak self] snapshot, error in
@@ -49,11 +47,12 @@ class CommentService: ObservableObject {
             }
     }
     
-    // MARK: - Add Comment
+    // MARK: - Add Comment with Notification
     
     func addComment(
         text: String,
         postId: String,
+        postOwnerId: String,
         authorId: String,
         authorName: String,
         authorUsername: String,
@@ -73,26 +72,52 @@ class CommentService: ObservableObject {
         var commentData = comment
         commentData.id = docRef.documentID
         
-        docRef.setData(commentData.toFirestoreData()) { error in
+        docRef.setData(commentData.toFirestoreData()) { [weak self] error in
             if let error = error {
                 completion(.failure(error))
             } else {
                 // Update comment count on the post
-                self.incrementCommentCount(postId: postId)
+                self?.incrementCommentCount(postId: postId)
+                
+                // Send push notification to post owner (if not commenting on own post)
+                if postOwnerId != authorId {
+                    self?.sendCommentNotification(
+                        postOwnerId: postOwnerId,
+                        commenterName: authorName,
+                        commentPreview: text,
+                        postId: postId
+                    )
+                }
+                
                 completion(.success(docRef.documentID))
             }
         }
     }
     
+    /// Send push notification for new comment
+    private func sendCommentNotification(
+        postOwnerId: String,
+        commenterName: String,
+        commentPreview: String,
+        postId: String
+    ) {
+        NotificationService.shared.sendNewCommentNotification(
+            postOwnerId: postOwnerId,
+            commenterName: commenterName,
+            commentPreview: commentPreview,
+            postId: postId
+        )
+    }
+    
     // MARK: - Delete Comment
     
     func deleteComment(commentId: String, postId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        db.collection("comments").document(commentId).delete { error in
+        db.collection("comments").document(commentId).delete { [weak self] error in
             if let error = error {
                 completion(.failure(error))
             } else {
                 // Decrement comment count on the post
-                self.decrementCommentCount(postId: postId)
+                self?.decrementCommentCount(postId: postId)
                 completion(.success(()))
             }
         }

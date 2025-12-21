@@ -176,10 +176,12 @@ struct ProOnboardingView: View {
                 authManager.setPendingProStatus(true)
                 
                 // Send notification about application submission
-                NotificationService.shared.sendProApplicationStatusNotification(
-                    status: "pending",
-                    businessName: application.businessName
-                )
+                NotificationService.shared
+                    .sendProApplicationStatusNotification(
+                        status: "pending",
+                        businessName: application.businessName,
+                        userId: application.userId
+                    )
                 
                 // Start listening for status changes
                 NotificationService.shared.listenForProApplicationStatus(userId: application.userId)

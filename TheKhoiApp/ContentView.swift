@@ -23,14 +23,16 @@ struct ContentView: View {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: KHOIColors.accentBrown))
                 }
-            } else if authManager.isOnboardingComplete {
-                RootView()
-                    .environmentObject(authManager)
             } else if authManager.needsProfileSetup {
                 ProfileSetupView()
                     .environmentObject(authManager)
-            } else {
+            } else if authManager.showOnboarding {
+                // Only show onboarding when explicitly requested (not on first launch)
                 OnboardingView()
+                    .environmentObject(authManager)
+            } else {
+                // Show main app - works for both logged in users and guests
+                RootView()
                     .environmentObject(authManager)
             }
         }
@@ -908,6 +910,8 @@ struct RootView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var selectedTab = 0
     @State private var showCreatePost = false
+    @State private var showLoginSheet = false
+    @State private var loginPromptMessage = ""
     
     var body: some View {
         TabView(selection: Binding(
@@ -916,20 +920,39 @@ struct RootView: View {
                 // Intercept the "Post" tap (Tag 2) only if in Business Mode
                 if authManager.isBusinessMode && newValue == 2 {
                     showCreatePost = true
+                } else if newValue == 1 || newValue == 3 || newValue == 4 {
+                    // Appointments, Chats, Profile require login
+                    if !authManager.isLoggedIn {
+                        loginPromptMessage = getLoginMessage(for: newValue)
+                        showLoginSheet = true
+                    } else {
+                        selectedTab = newValue
+                    }
                 } else {
                     selectedTab = newValue
                 }
             }
         )) {
-            // TAB 0: Discover
+            // TAB 0: Discover (accessible to everyone)
             DiscoverView()
                 .tabItem { Label("Discover", systemImage: "house") }
                 .tag(0)
             
-            // TAB 1: Appointments
-            AppointmentsView()
-                .tabItem { Label("Appointments", systemImage: "calendar") }
-                .tag(1)
+            // TAB 1: Appointments (requires login)
+            Group {
+                if authManager.isLoggedIn {
+                    AppointmentsView()
+                } else {
+                    GuestPlaceholderView(
+                        icon: "calendar",
+                        title: "Appointments",
+                        message: "Sign in to book and manage your appointments",
+                        onSignIn: { showLoginSheet = true }
+                    )
+                }
+            }
+            .tabItem { Label("Appointments", systemImage: "calendar") }
+            .tag(1)
             
             // MIDDLE TAB: Only for Business Mode
             if authManager.isBusinessMode {
@@ -940,15 +963,37 @@ struct RootView: View {
                     .tag(2)
             }
             
-            // TAB 3: Chats
-            ChatsView()
-                .tabItem { Label("Chats", systemImage: "message.fill") }
-                .tag(3)
+            // TAB 3: Chats (requires login)
+            Group {
+                if authManager.isLoggedIn {
+                    ChatsView()
+                } else {
+                    GuestPlaceholderView(
+                        icon: "message.fill",
+                        title: "Messages",
+                        message: "Sign in to message beauty professionals",
+                        onSignIn: { showLoginSheet = true }
+                    )
+                }
+            }
+            .tabItem { Label("Chats", systemImage: "message.fill") }
+            .tag(3)
             
-            // TAB 4: Profile (unified view for client and professional)
-            UserProfileView()
-                .tabItem { Label("Profile", systemImage: "person.fill") }
-                .tag(4)
+            // TAB 4: Profile (requires login)
+            Group {
+                if authManager.isLoggedIn {
+                    UserProfileView()
+                } else {
+                    GuestPlaceholderView(
+                        icon: "person.fill",
+                        title: "Profile",
+                        message: "Sign in to view your profile and saved looks",
+                        onSignIn: { showLoginSheet = true }
+                    )
+                }
+            }
+            .tabItem { Label("Profile", systemImage: "person.fill") }
+            .tag(4)
         }
         .tint(KHOIColors.accentBrown)
         .labelStyle(.iconOnly)
@@ -956,6 +1001,144 @@ struct RootView: View {
             CreatePostView()
                 .environmentObject(authManager)
         }
+        .sheet(isPresented: $showLoginSheet) {
+            LoginPromptSheet(message: loginPromptMessage)
+                .environmentObject(authManager)
+        }
+    }
+    
+    private func getLoginMessage(for tab: Int) -> String {
+        switch tab {
+        case 1: return "Sign in to book and manage your appointments"
+        case 3: return "Sign in to message beauty professionals"
+        case 4: return "Sign in to view your profile and saved looks"
+        default: return "Sign in to access this feature"
+        }
+    }
+}
+
+// MARK: - Guest Placeholder View
+struct GuestPlaceholderView: View {
+    let icon: String
+    let title: String
+    let message: String
+    let onSignIn: () -> Void
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                KHOIColors.background.ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 60))
+                        .foregroundColor(KHOIColors.mutedText.opacity(0.5))
+                    
+                    Text(title)
+                        .font(KHOITheme.title)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text(message)
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    Button(action: onSignIn) {
+                        Text("Sign In")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 48)
+                            .padding(.vertical, 14)
+                            .background(KHOIColors.accentBrown)
+                            .cornerRadius(12)
+                    }
+                    .padding(.top, 8)
+                    
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Login Prompt Sheet
+struct LoginPromptSheet: View {
+    @EnvironmentObject var authManager: AuthManager
+    @Environment(\.dismiss) private var dismiss
+    
+    let message: String
+    @State private var showOnboarding = false
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                KHOIColors.background.ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 70))
+                        .foregroundColor(KHOIColors.accentBrown)
+                    
+                    Text("Sign In Required")
+                        .font(KHOITheme.title)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text(message)
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    VStack(spacing: 12) {
+                        Button(action: {
+                            dismiss()
+                            // Trigger onboarding flow
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                authManager.showOnboarding = true
+                            }
+                        }) {
+                            Text("Sign In / Create Account")
+                                .font(KHOITheme.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(KHOIColors.accentBrown)
+                                .cornerRadius(12)
+                        }
+                        
+                        Button(action: { dismiss() }) {
+                            Text("Continue Browsing")
+                                .font(KHOITheme.body)
+                                .foregroundColor(KHOIColors.mutedText)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(KHOIColors.darkText)
+                            .padding(8)
+                            .background(KHOIColors.chipBackground)
+                            .clipShape(Circle())
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 

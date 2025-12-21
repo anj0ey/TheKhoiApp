@@ -17,6 +17,7 @@ struct DiscoverView: View {
     @StateObject private var feedService = FeedService()
     @StateObject private var searchService = SearchService()
     @State private var savedPostIDs: Set<String> = []
+    @State private var showLoginPrompt: Bool = false
 
     private let categories = ["All", "Skin", "Nails", "Makeup", "Lash", "Hair", "Brows", "Body"]
     
@@ -28,7 +29,6 @@ struct DiscoverView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
-                        
                         // 1. Search Bar
                         searchBarSection
                         
@@ -55,6 +55,10 @@ struct DiscoverView: View {
             }
             .onChange(of: searchText) { newValue in
                 searchService.search(query: newValue)
+            }
+            .sheet(isPresented: $showLoginPrompt) {
+                SaveLoginPromptSheet()
+                    .environmentObject(authManager)
             }
         }
     }
@@ -262,7 +266,12 @@ struct DiscoverView: View {
     }
     
     private func toggleSave(post: Post) {
-        guard let userId = authManager.firebaseUID else { return }
+        // Check if user is logged in
+        guard authManager.isLoggedIn, let userId = authManager.firebaseUID else {
+            // Show login prompt for guests
+            showLoginPrompt = true
+            return
+        }
         
         let wasAlreadySaved = savedPostIDs.contains(post.id)
         
@@ -276,7 +285,7 @@ struct DiscoverView: View {
     }
     
     private func loadSavedPosts() {
-        guard let userId = authManager.firebaseUID else { return }
+        guard authManager.isLoggedIn, let userId = authManager.firebaseUID else { return }
         feedService.fetchUserSavedPosts(userId: userId) { postIds in
             self.savedPostIDs = postIds
         }
@@ -595,4 +604,78 @@ struct TagBadge: View {
 #Preview {
     DiscoverView()
         .environmentObject(AuthManager())
+}
+
+// MARK: - Save Login Prompt Sheet
+struct SaveLoginPromptSheet: View {
+    @EnvironmentObject var authManager: AuthManager
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                KHOIColors.background.ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(KHOIColors.accentBrown)
+                    
+                    Text("Save Your Favorites")
+                        .font(KHOITheme.title)
+                        .foregroundColor(KHOIColors.darkText)
+                    
+                    Text("Sign in to save looks you love and build your personal collection.")
+                        .font(KHOITheme.body)
+                        .foregroundColor(KHOIColors.mutedText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    VStack(spacing: 12) {
+                        Button(action: {
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                authManager.showOnboarding = true
+                            }
+                        }) {
+                            Text("Sign In / Create Account")
+                                .font(KHOITheme.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(KHOIColors.accentBrown)
+                                .cornerRadius(12)
+                        }
+                        
+                        Button(action: { dismiss() }) {
+                            Text("Maybe Later")
+                                .font(KHOITheme.body)
+                                .foregroundColor(KHOIColors.mutedText)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(KHOIColors.darkText)
+                            .padding(8)
+                            .background(KHOIColors.chipBackground)
+                            .clipShape(Circle())
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
 }

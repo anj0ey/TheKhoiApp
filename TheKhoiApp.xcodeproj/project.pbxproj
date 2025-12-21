@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6AB1A7992EF5278000295A09 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 6AB1A7982EF5278000295A09 /* FirebaseMessaging */; };
 		94D3C60C2EDFBA8C00927F72 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 94D3C60B2EDFBA8C00927F72 /* FirebaseAuth */; };
 		94D3C60E2EDFBA9300927F72 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 94D3C60D2EDFBA9300927F72 /* FirebaseDatabase */; };
 		94D3C6102EDFBAA000927F72 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 94D3C60F2EDFBAA000927F72 /* FirebaseStorage */; };
@@ -46,6 +47,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6AB1A7992EF5278000295A09 /* FirebaseMessaging in Frameworks */,
 				94D3C6152EDFBB0000927F72 /* GoogleSignIn in Frameworks */,
 				94D3C60E2EDFBA9300927F72 /* FirebaseDatabase in Frameworks */,
 				94D3C60C2EDFBA8C00927F72 /* FirebaseAuth in Frameworks */,
@@ -110,6 +112,7 @@
 				94D3C6142EDFBB0000927F72 /* GoogleSignIn */,
 				94D3C6162EDFBB0000927F72 /* GoogleSignInSwift */,
 				94D3C6182EDFBB4000927F72 /* FirebaseFirestore */,
+				6AB1A7982EF5278000295A09 /* FirebaseMessaging */,
 			);
 			productName = TheKhoiApp;
 			productReference = 076539A42EBDA77C007F85C5 /* TheKhoiApp.app */;
@@ -302,6 +305,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TheKhoiApp/TheKhoiApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UAF6KVRZTG;
@@ -333,6 +337,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TheKhoiApp/TheKhoiApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UAF6KVRZTG;
@@ -402,6 +407,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6AB1A7982EF5278000295A09 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9450CD922EDFB91F00BE7DB6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
 		94D3C60B2EDFBA8C00927F72 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9450CD922EDFB91F00BE7DB6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

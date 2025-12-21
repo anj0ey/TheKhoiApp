@@ -354,6 +354,7 @@ struct PostDetailView: View {
         commentService.addComment(
             text: commentText,
             postId: post.id,
+            postOwnerId: post.artistId,
             authorId: userId,
             authorName: currentUser.fullName,
             authorUsername: currentUser.username,

@@ -57,6 +57,12 @@ final class AuthManager: ObservableObject {
     @Published var isOnboardingComplete: Bool = false
     @Published var needsProfileSetup: Bool = false
     @Published var isCheckingAuth: Bool = true
+    @Published var showOnboarding: Bool = false  // Controls when to show OnboardingView
+    
+    // Computed property to check if user is logged in
+    var isLoggedIn: Bool {
+        return firebaseUID != nil && currentUser != nil
+    }
     
     // From Apple / Google providers
     @Published var authenticatedEmail: String?
@@ -98,11 +104,11 @@ final class AuthManager: ObservableObject {
     func toggleUserMode() {
         // Only toggle if user has business profile
         guard hasBusinessProfile else {
-            print("⚠️ Cannot switch to Business mode: No business profile")
+            print("Cannot switch to Business mode: No business profile")
             return
         }
         isBusinessMode.toggle()
-        print("🔄 User switched to \(isBusinessMode ? "Business" : "Customer") mode")
+        print("User switched to \(isBusinessMode ? "Business" : "Customer") mode")
     }
     
     init() {
@@ -160,12 +166,19 @@ final class AuthManager: ObservableObject {
                         switch nsError.code {
                         case 17009: // Wrong password
                             errorMessage = "Incorrect password. Please try again."
-                        case 17011: // User not found
-                            errorMessage = "No account found with this email."
+                        case 17011: // User not found in Firebase Auth
+                            errorMessage = "No account found with this email. Please create an account."
                         case 17010: // Too many attempts
                             errorMessage = "Too many failed attempts. Please try again later."
+                        case 17004: // Invalid credential
+                            errorMessage = "Invalid email or password. Please try again."
+                        case 17999: // Internal error / malformed credential
+                            errorMessage = "Authentication error. Please try again."
+                        case 17008: // Invalid email format
+                            errorMessage = "Please enter a valid email address."
                         default:
-                            errorMessage = error.localizedDescription
+                            errorMessage = "Sign in failed. Please check your credentials."
+                            print("Firebase Auth error code: \(nsError.code), description: \(error.localizedDescription)")
                         }
                     }
                     
@@ -262,7 +275,6 @@ final class AuthManager: ObservableObject {
         let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
         
         // Check Firestore users collection for existing user
-        // (fetchSignInMethods is deprecated and returns empty due to Email Enumeration Protection)
         db.collection("users")
             .whereField("email", isEqualTo: trimmedEmail)
             .getDocuments { [weak self] snapshot, error in
@@ -276,12 +288,100 @@ final class AuthManager: ObservableObject {
                         return
                     }
                     
-                    // If we found a user document, they exist
-                    let userExists = !(snapshot?.documents.isEmpty ?? true)
+                    // If we found a user document, they likely exist
+                    let userExistsInFirestore = !(snapshot?.documents.isEmpty ?? true)
                     self?.authenticatedEmail = trimmedEmail
                     
-                    print(userExists ? "✅ Existing user found in Firestore" : "ℹ️ New user, not in Firestore")
-                    completion(true, userExists)
+                    print(userExistsInFirestore ? "Existing user found in Firestore" : "ℹ️ New user, not in Firestore")
+                    completion(true, userExistsInFirestore)
+                }
+            }
+    }
+    
+    // MARK: - Sign In with Email (handles orphaned Firestore records)
+    // Call this after continueWithEmail returns existingUser = true
+    // If sign in fails with "user not found", the Firestore record is orphaned
+    // and we should treat them as a new user
+    func signInOrCreateAccount(email: String, password: String, completion: @escaping (Bool, String?, Bool) -> Void) {
+        // Returns: (success, errorMessage, shouldCreateNewAccount)
+        isEmailLoading = true
+        emailAuthError = nil
+        
+        let trimmedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        Auth.auth().signIn(withEmail: trimmedEmail, password: password) { [weak self] authResult, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isEmailLoading = false
+                
+                if let error = error {
+                    let nsError = error as NSError
+                    
+                    // Check if user doesn't exist in Firebase Auth (orphaned Firestore record)
+                    if nsError.code == 17011 { // User not found
+                        print("User exists in Firestore but not in Firebase Auth. Treating as new user.")
+                        // Clean up orphaned Firestore record
+                        self.cleanupOrphanedFirestoreRecord(email: trimmedEmail)
+                        completion(false, nil, true) // shouldCreateNewAccount = true
+                        return
+                    }
+                    
+                    var errorMessage = "Sign in failed. Please try again."
+                    
+                    if nsError.domain == "FIRAuthErrorDomain" {
+                        switch nsError.code {
+                        case 17009: // Wrong password
+                            errorMessage = "Incorrect password. Please try again."
+                        case 17010: // Too many attempts
+                            errorMessage = "Too many failed attempts. Please try again later."
+                        case 17004, 17999: // Invalid credential / malformed
+                            errorMessage = "Invalid email or password. Please try again."
+                        case 17008: // Invalid email format
+                            errorMessage = "Please enter a valid email address."
+                        default:
+                            errorMessage = "Sign in failed. Please check your credentials."
+                            print("Firebase Auth error code: \(nsError.code)")
+                        }
+                    }
+                    
+                    self.emailAuthError = errorMessage
+                    completion(false, errorMessage, false)
+                    return
+                }
+                
+                guard let user = authResult?.user else {
+                    completion(false, "Authentication failed.", false)
+                    return
+                }
+                
+                print("Email Sign In successful for: \(user.email ?? "No email")")
+                
+                self.firebaseUID = user.uid
+                self.authenticatedEmail = user.email
+                self.authenticatedName = user.displayName
+                
+                self.checkExistingProfile(uid: user.uid)
+                completion(true, nil, false)
+            }
+        }
+    }
+    
+    // Clean up orphaned Firestore user record (exists in Firestore but not in Auth)
+    private func cleanupOrphanedFirestoreRecord(email: String) {
+        db.collection("users")
+            .whereField("email", isEqualTo: email)
+            .getDocuments { [weak self] snapshot, error in
+                guard let documents = snapshot?.documents else { return }
+                
+                for doc in documents {
+                    doc.reference.delete { error in
+                        if let error = error {
+                            print("Error deleting orphaned record: \(error)")
+                        } else {
+                            print("🗑️ Cleaned up orphaned Firestore record for: \(email)")
+                        }
+                    }
                 }
             }
     }
@@ -372,6 +472,7 @@ final class AuthManager: ObservableObject {
             self.isOnboardingComplete = true
             self.needsProfileSetup = false
             self.isCheckingAuth = false
+            self.showOnboarding = false  // Hide onboarding view
             UserDefaults.standard.set(true, forKey: "isOnboardingComplete")
         }
     }
@@ -411,6 +512,7 @@ final class AuthManager: ObservableObject {
                     self.currentUser = profile
                     self.isOnboardingComplete = true
                     self.needsProfileSetup = false
+                    self.showOnboarding = false  // Reset to show main app
                     
                     // Check for business profile after user profile is loaded
                     self.checkBusinessProfile(uid: uid)
@@ -420,6 +522,7 @@ final class AuthManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.needsProfileSetup = true
                     self.isOnboardingComplete = false
+                    self.showOnboarding = false  // Reset since we're going to profile setup
                     self.hasBusinessProfile = false
                     self.isBusinessMode = false
                     self.isCheckingAuth = false
@@ -431,7 +534,7 @@ final class AuthManager: ObservableObject {
     // MARK: - Check Business Profile
     /// Checks if user has an artist document in Firestore (completed business onboarding)
     private func checkBusinessProfile(uid: String) {
-        print("🔍 Checking for business profile for UID: \(uid)")
+        print("Checking for business profile for UID: \(uid)")
         
         db.collection("artists").document(uid).getDocument { [weak self] document, error in
             guard let self = self else { return }
@@ -452,6 +555,12 @@ final class AuthManager: ObservableObject {
                     // Check for pending pro application
                     self.checkPendingProApplication()
                 }
+                
+                // Save FCM token for push notifications
+                NotificationService.shared.saveFCMToken(userId: uid)
+                
+                // Start listening to user's notifications
+                NotificationService.shared.listenToNotifications(userId: uid)
                 
                 self.isCheckingAuth = false
             }
@@ -899,6 +1008,12 @@ final class AuthManager: ObservableObject {
     
     // MARK: - Log Out
     func logOut() {
+        // 0. Remove FCM token before signing out
+        if let uid = firebaseUID {
+            NotificationService.shared.removeFCMToken(userId: uid)
+            NotificationService.shared.stopListening()
+        }
+        
         // 1. Sign out of Firebase
         do {
             try Auth.auth().signOut()
@@ -925,12 +1040,16 @@ final class AuthManager: ObservableObject {
         // 5. Reset state
         isOnboardingComplete = false
         needsProfileSetup = false
+        showOnboarding = false
         
         // 6. Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: userKey)
         UserDefaults.standard.removeObject(forKey: "isOnboardingComplete")
         UserDefaults.standard.removeObject(forKey: "isBusinessMode")
         UserDefaults.standard.removeObject(forKey: "hasPendingProApplication")
+        
+        // 7. Clear notification badge
+        UIApplication.shared.applicationIconBadgeNumber = 0
         
         print("🚪 User fully signed out")
     }
@@ -961,12 +1080,12 @@ final class AuthManager: ObservableObject {
         // Commit Firestore deletions first
         batch.commit { [weak self] error in
             if let error = error {
-                print("❌ Error deleting Firestore data: \(error.localizedDescription)")
+                print("Error deleting Firestore data: \(error.localizedDescription)")
                 completion(false, "Failed to delete account data. Please try again.")
                 return
             }
             
-            print("✅ Firestore data deleted")
+            print("Firestore data deleted")
             
             // 4. Delete profile images from Storage
             let storage = Storage.storage()
@@ -983,7 +1102,7 @@ final class AuthManager: ObservableObject {
                 
                 DispatchQueue.main.async {
                     if let error = error {
-                        print("❌ Error deleting Firebase Auth account: \(error.localizedDescription)")
+                        print("Error deleting Firebase Auth account: \(error.localizedDescription)")
                         
                         // Check if re-authentication is required
                         let nsError = error as NSError
@@ -995,7 +1114,7 @@ final class AuthManager: ObservableObject {
                         return
                     }
                     
-                    print("✅ Firebase Auth account deleted")
+                    print("Firebase Auth account deleted")
                     
                     // 6. Clear local data (same as logOut)
                     self.currentUser = nil
@@ -1063,14 +1182,14 @@ final class AuthManager: ObservableObject {
                 extractedName = nameParts.joined(separator: " ")
                 // Store in UserDefaults as backup since Apple only sends this once
                 UserDefaults.standard.set(extractedName, forKey: "appleSignInName_\(appleIDCredential.user)")
-                print("📝 Stored Apple name: \(extractedName ?? "nil")")
+                print("Stored Apple name: \(extractedName ?? "nil")")
             }
         }
         
         // If no name from Apple, try to retrieve from UserDefaults (for returning users)
         if extractedName == nil || extractedName?.isEmpty == true {
             extractedName = UserDefaults.standard.string(forKey: "appleSignInName_\(appleIDCredential.user)")
-            print("📝 Retrieved stored Apple name: \(extractedName ?? "nil")")
+            print("Retrieved stored Apple name: \(extractedName ?? "nil")")
         }
         
         let credential = OAuthProvider.appleCredential(

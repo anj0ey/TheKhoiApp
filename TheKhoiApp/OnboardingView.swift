@@ -320,19 +320,21 @@ struct PasswordEntrySheet: View {
     private func handleSignIn() {
         localError = nil
         
-        authManager.signInWithEmail(email: email, password: password) { success, error in
+        authManager.signInOrCreateAccount(email: email, password: password) { success, error, shouldCreateNewAccount in
             if success {
                 dismiss()
+            } else if shouldCreateNewAccount {
+                // User exists in Firestore but not in Firebase Auth (orphaned record)
+                // Dismiss and redirect to profile setup as new user
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    authManager.startNewUserProfileSetup(email: email)
+                }
             } else {
                 localError = error
             }
         }
     }
-}
-
-#Preview {
-    OnboardingView()
-        .environmentObject(AuthManager())
 }
 
 #Preview {
