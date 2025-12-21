@@ -2,7 +2,7 @@
 //  ChatsView.swift
 //  TheKhoiApp
 //
-//  Chat list view matching the design
+//  Chat list view with referral card support
 //
 
 import SwiftUI
@@ -204,7 +204,6 @@ struct ChatFilterChip: View {
                         .stroke(isSelected ? Color.clear : KHOIColors.divider, lineWidth: 1)
                 )
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -223,16 +222,22 @@ struct ChatRowView: View {
     
     var body: some View {
         HStack(spacing: KHOITheme.spacing_md) {
-            // Profile image with unread badge
-            ZStack(alignment: .topLeading) {
-                Circle()
-                    .fill(KHOIColors.chipBackground)
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        Text(otherParticipant?.fullName.prefix(1).uppercased() ?? "?")
-                            .font(KHOITheme.title2)
-                            .foregroundColor(KHOIColors.mutedText)
-                    )
+            // Avatar with unread badge
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: URL(string: otherParticipant?.profileImageURL ?? "")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle()
+                        .fill(KHOIColors.cardBackground)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .foregroundColor(KHOIColors.mutedText)
+                        )
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(Circle())
                 
                 // Unread badge
                 if unreadCount > 0 {
@@ -407,7 +412,7 @@ struct ChatDetailView: View {
     }
 }
 
-// MARK: - Message Bubble
+// MARK: - Message Bubble (Updated with Referral Card)
 struct MessageBubble: View {
     let message: Message
     let isFromCurrentUser: Bool
@@ -417,15 +422,21 @@ struct MessageBubble: View {
             if isFromCurrentUser { Spacer() }
             
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                Text(message.text)
-                    .font(KHOITheme.body)
-                    .foregroundColor(isFromCurrentUser ? .white : KHOIColors.darkText)
-                    .padding(.horizontal, KHOITheme.spacing_md)
-                    .padding(.vertical, KHOITheme.spacing_sm)
-                    .background(
-                        isFromCurrentUser ? KHOIColors.accentBrown : KHOIColors.cardBackground
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_lg))
+                // Check if this is a referral message
+                if message.isReferral, let referralData = message.referralData {
+                    ReferralCard(referralData: referralData, isFromCurrentUser: isFromCurrentUser)
+                } else {
+                    // Regular text message
+                    Text(message.text)
+                        .font(KHOITheme.body)
+                        .foregroundColor(isFromCurrentUser ? .white : KHOIColors.darkText)
+                        .padding(.horizontal, KHOITheme.spacing_md)
+                        .padding(.vertical, KHOITheme.spacing_sm)
+                        .background(
+                            isFromCurrentUser ? KHOIColors.accentBrown : KHOIColors.cardBackground
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: KHOITheme.cornerRadius_lg))
+                }
                 
                 Text(message.formattedTime)
                     .font(KHOITheme.caption2)
@@ -434,5 +445,94 @@ struct MessageBubble: View {
             
             if !isFromCurrentUser { Spacer() }
         }
+    }
+}
+
+// MARK: - Referral Card (Tappable)
+struct ReferralCard: View {
+    let referralData: ReferralMessageData
+    let isFromCurrentUser: Bool
+    
+    var body: some View {
+        NavigationLink(destination: ArtistProfileLoader(artistId: referralData.artistId)) {
+            VStack(spacing: 0) {
+                // Artist info
+                HStack(spacing: 12) {
+                    // Profile image
+                    AsyncImage(url: URL(string: referralData.artistProfileImageURL ?? "")) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .foregroundColor(KHOIColors.mutedText)
+                            )
+                    }
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(referralData.artistName)
+                            .font(KHOITheme.bodyBold)
+                            .foregroundColor(KHOIColors.darkText)
+                        
+                        Text(referralData.displayHandle)
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.mutedText)
+                        
+                        // Rating and location
+                        HStack(spacing: 8) {
+                            HStack(spacing: 2) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(KHOIColors.accentBrown)
+                                Text(String(format: "%.1f", referralData.artistRating))
+                                    .font(.system(size: 11))
+                                    .foregroundColor(KHOIColors.mutedText)
+                            }
+                            
+                            if !referralData.artistCity.isEmpty {
+                                Text("•")
+                                    .foregroundColor(KHOIColors.mutedText)
+                                Text(referralData.artistCity)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(KHOIColors.mutedText)
+                            }
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                
+                // Services preview
+                if !referralData.artistServices.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(referralData.artistServices.prefix(3), id: \.self) { service in
+                            Text(service)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(KHOIColors.darkText)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(4)
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+            }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 2)
+            .frame(maxWidth: 280)
+        }
+        .buttonStyle(.plain)
     }
 }

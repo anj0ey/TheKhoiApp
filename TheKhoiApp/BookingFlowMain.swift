@@ -707,7 +707,7 @@ struct BookingFlowView: View {
             servicePrice: service.price,
             serviceDuration: service.duration,
             serviceDescription: service.description,
-            date: bookingState.selectedDate,
+            date: bookingState.appointmentDate,
             timeSlot: timeSlot.time,
             endTime: bookingState.endTime,
             status: .pending,

@@ -2,11 +2,67 @@
 //  ChatModels.swift
 //  TheKhoiApp
 //
-//  Chat data models
+//  Chat data models with referral support
 //
 
 import Foundation
 import FirebaseFirestore
+
+// MARK: - Message Type
+enum MessageType: String, Codable {
+    case text = "text"
+    case referral = "referral"
+    case image = "image"
+}
+
+// MARK: - Referral Data (embedded in referral messages)
+struct ReferralMessageData: Codable {
+    let artistId: String
+    let artistName: String
+    let artistUsername: String
+    let artistProfileImageURL: String?
+    let artistCity: String
+    let artistRating: Double
+    let artistServices: [String]
+    
+    init(
+        artistId: String,
+        artistName: String,
+        artistUsername: String,
+        artistProfileImageURL: String?,
+        artistCity: String,
+        artistRating: Double,
+        artistServices: [String]
+    ) {
+        self.artistId = artistId
+        self.artistName = artistName
+        self.artistUsername = artistUsername
+        self.artistProfileImageURL = artistProfileImageURL
+        self.artistCity = artistCity
+        self.artistRating = artistRating
+        self.artistServices = artistServices
+    }
+    
+    init?(data: [String: Any]) {
+        guard let artistId = data["artistId"] as? String,
+              let artistName = data["artistName"] as? String,
+              let artistUsername = data["artistUsername"] as? String else {
+            return nil
+        }
+        
+        self.artistId = artistId
+        self.artistName = artistName
+        self.artistUsername = artistUsername
+        self.artistProfileImageURL = data["artistProfileImageURL"] as? String
+        self.artistCity = data["artistCity"] as? String ?? ""
+        self.artistRating = data["artistRating"] as? Double ?? 5.0
+        self.artistServices = data["artistServices"] as? [String] ?? []
+    }
+    
+    var displayHandle: String {
+        return artistUsername.hasPrefix("@") ? artistUsername : "@\(artistUsername)"
+    }
+}
 
 // MARK: - Chat Tag (service type or relationship)
 enum ChatTag: String, CaseIterable, Codable {
@@ -87,7 +143,7 @@ struct Conversation: Identifiable, Codable {
     }
 }
 
-// MARK: - Message
+// MARK: - Message (Updated with type support)
 struct Message: Identifiable, Codable {
     let id: String
     let conversationId: String
@@ -96,11 +152,61 @@ struct Message: Identifiable, Codable {
     let text: String
     let timestamp: Date
     let isRead: Bool
+    let messageType: MessageType
+    let referralData: ReferralMessageData?
+    
+    // Convenience initializer for text messages
+    init(
+        id: String,
+        conversationId: String,
+        senderId: String,
+        senderName: String,
+        text: String,
+        timestamp: Date,
+        isRead: Bool
+    ) {
+        self.id = id
+        self.conversationId = conversationId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.text = text
+        self.timestamp = timestamp
+        self.isRead = isRead
+        self.messageType = .text
+        self.referralData = nil
+    }
+    
+    // Full initializer
+    init(
+        id: String,
+        conversationId: String,
+        senderId: String,
+        senderName: String,
+        text: String,
+        timestamp: Date,
+        isRead: Bool,
+        messageType: MessageType,
+        referralData: ReferralMessageData?
+    ) {
+        self.id = id
+        self.conversationId = conversationId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.text = text
+        self.timestamp = timestamp
+        self.isRead = isRead
+        self.messageType = messageType
+        self.referralData = referralData
+    }
     
     var formattedTime: String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: timestamp)
+    }
+    
+    var isReferral: Bool {
+        return messageType == .referral
     }
 }
 
@@ -174,16 +280,46 @@ extension Message {
         self.text = data["text"] as? String ?? ""
         self.timestamp = (data["timestamp"] as? Timestamp)?.dateValue() ?? Date()
         self.isRead = data["isRead"] as? Bool ?? false
+        
+        // Parse message type
+        if let typeString = data["messageType"] as? String,
+           let type = MessageType(rawValue: typeString) {
+            self.messageType = type
+        } else {
+            self.messageType = .text
+        }
+        
+        // Parse referral data if present
+        if let refData = data["referralData"] as? [String: Any] {
+            self.referralData = ReferralMessageData(data: refData)
+        } else {
+            self.referralData = nil
+        }
     }
     
     func toFirestoreData() -> [String: Any] {
-        return [
+        var data: [String: Any] = [
             "conversationId": conversationId,
             "senderId": senderId,
             "senderName": senderName,
             "text": text,
             "timestamp": Timestamp(date: timestamp),
-            "isRead": isRead
+            "isRead": isRead,
+            "messageType": messageType.rawValue
         ]
+        
+        if let refData = referralData {
+            data["referralData"] = [
+                "artistId": refData.artistId,
+                "artistName": refData.artistName,
+                "artistUsername": refData.artistUsername,
+                "artistProfileImageURL": refData.artistProfileImageURL ?? "",
+                "artistCity": refData.artistCity,
+                "artistRating": refData.artistRating,
+                "artistServices": refData.artistServices
+            ]
+        }
+        
+        return data
     }
 }

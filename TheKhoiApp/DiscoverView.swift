@@ -3,6 +3,7 @@
 //  TheKhoiApp
 //
 //  Updated with working search functionality
+//  NOTE: UserSearchRow and PostSearchTile are in UserSearchRow.swift
 //
 
 import SwiftUI
@@ -289,105 +290,6 @@ struct DiscoverView: View {
         feedService.fetchUserSavedPosts(userId: userId) { postIds in
             self.savedPostIDs = postIds
         }
-    }
-}
-
-// MARK: - User Search Row
-struct UserSearchRow: View {
-    let user: UserSearchResult
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Profile image
-            if let urlString = user.profileImageURL, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle().fill(KHOIColors.chipBackground)
-                }
-                .frame(width: 48, height: 48)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(KHOIColors.chipBackground)
-                    .frame(width: 48, height: 48)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .foregroundColor(KHOIColors.mutedText)
-                    )
-            }
-            
-            // Name and username
-            VStack(alignment: .leading, spacing: 2) {
-                Text(user.fullName)
-                    .font(KHOITheme.bodyBold)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text("@\(user.username)")
-                    .font(KHOITheme.caption)
-                    .foregroundColor(KHOIColors.mutedText)
-            }
-            
-            Spacer()
-            
-            // Artist badge
-            if user.isArtist {
-                Text("PRO")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(KHOIColors.accentBrown)
-                    .cornerRadius(8)
-            }
-            
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundColor(KHOIColors.mutedText)
-        }
-        .padding(.horizontal, KHOITheme.spacing_md)
-        .padding(.vertical, 8)
-        .background(KHOIColors.cardBackground)
-        .cornerRadius(12)
-        .padding(.horizontal, KHOITheme.spacing_md)
-    }
-}
-
-// MARK: - Post Search Tile
-struct PostSearchTile: View {
-    let post: PostSearchResult
-    
-    var body: some View {
-        AsyncImage(url: URL(string: post.imageURL)) { phase in
-            switch phase {
-            case .empty:
-                Rectangle()
-                    .fill(KHOIColors.chipBackground)
-                    .aspectRatio(1, contentMode: .fit)
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .aspectRatio(1, contentMode: .fit)
-                    .clipped()
-            case .failure:
-                Rectangle()
-                    .fill(KHOIColors.chipBackground)
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(KHOIColors.mutedText)
-                    )
-            @unknown default:
-                Rectangle()
-                    .fill(KHOIColors.chipBackground)
-                    .aspectRatio(1, contentMode: .fit)
-            }
-        }
-        .cornerRadius(8)
     }
 }
 

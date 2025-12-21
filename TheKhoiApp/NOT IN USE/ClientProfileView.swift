@@ -2,7 +2,7 @@
 //  ClientProfileView.swift
 //  TheKhoiApp
 //
-// NOT IN USE
+// NOT IN USE - FILE USED FOR DEMO
 
 import SwiftUI
 

@@ -6,6 +6,20 @@
 //
 
 import SwiftUI
+import SafariServices
+
+// open link in app
+struct SafariWebView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let controller = SFSafariViewController(url: url)
+        controller.preferredControlTintColor = UIColor(KHOIColors.accentBrown)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
 
 struct SettingsView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -18,6 +32,27 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
     @State private var deleteError: String?
+    
+    //Safari Viewing
+    @State private var showPrivacyPolicy = false
+    @State private var showTermsOfService = false
+
+    private let privacyPolicyURL = URL(string: "https://cut-termite-d3e.notion.site/Privacy-Policy-for-KHOI-2c7c7965dce380b5a36ee7c5c168ccc5?source=copy_link")!
+    private let termsOfServiceURL = URL(string: "https://cut-termite-d3e.notion.site/KHOI-Terms-and-Conditions-2d0c7965dce380d1b195dce0e5ae1aff?source=copy_link")!
+    
+    private func openSupportEmail() {
+        let email = "khoiqnguyen27@gmail.com"
+        let subject = "KHOI Support"
+        let body = "Hi KHOI Team,"
+
+        let mailtoString =
+            "mailto:\(email)?subject=\(subject)&body=\(body)"
+
+        if let encoded = mailtoString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: encoded) {
+            UIApplication.shared.open(url)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -104,13 +139,6 @@ struct SettingsView: View {
                                     title: "Push notifications",
                                     isOn: $pushNotifications
                                 )
-
-                                Divider()
-
-                                SettingsToggleRow(
-                                    title: "Marketing emails",
-                                    isOn: $marketingEmails
-                                )
                             }
                         }
                     }
@@ -126,33 +154,32 @@ struct SettingsView: View {
                         SettingsCard {
                             VStack(spacing: 0) {
                                 Button {
-                                    // TODO: Link to Help / FAQ
+                                    openSupportEmail()
                                 } label: {
-                                    SettingsChevronRow(title: "Help & FAQ")
+                                    SettingsChevronRow(title: "Contact Support")
+                                }
+                                
+                                Divider()
+                                
+                                Button {
+                                    showPrivacyPolicy = true
+                                } label: {
+                                    SettingsChevronRow(title: "Privacy Policy")
+                                }
+                                .sheet(isPresented: $showPrivacyPolicy) {
+                                    SafariWebView(url: privacyPolicyURL)
                                 }
 
+                                
                                 Divider()
-
+                                
                                 Button {
-                                    // TODO: Open contact support flow
+                                    showTermsOfService = true
                                 } label: {
-                                    SettingsChevronRow(title: "Contact support")
+                                    SettingsChevronRow(title: "Terms of Service")
                                 }
-                                
-                                Divider()
-                                
-                                Button {
-                                    // TODO: Privacy policy
-                                } label: {
-                                    SettingsChevronRow(title: "Privacy policy")
-                                }
-                                
-                                Divider()
-                                
-                                Button {
-                                    // TODO: Terms of service
-                                } label: {
-                                    SettingsChevronRow(title: "Terms of service")
+                                .sheet(isPresented: $showTermsOfService) {
+                                    SafariWebView(url: termsOfServiceURL)
                                 }
                             }
                         }

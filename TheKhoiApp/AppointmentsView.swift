@@ -34,13 +34,21 @@ struct AppointmentsView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
-                guard let userId = authManager.firebaseUID else { return }
-                if authManager.isBusinessMode {
-                    bookingService.fetchArtistAppointments(artistId: userId)
-                } else {
-                    bookingService.fetchClientAppointments(clientId: userId)
-                }
+                loadAppointments()
             }
+            .onChange(of: authManager.isBusinessMode) { _ in
+                loadAppointments()
+            }
+        }
+    }
+    
+    private func loadAppointments() {
+        guard let userId = authManager.firebaseUID else { return }
+        
+        if authManager.isBusinessMode {
+            bookingService.fetchArtistAppointments(artistId: userId)
+        } else {
+            bookingService.fetchClientAppointments(clientId: userId)
         }
     }
 }
@@ -52,15 +60,14 @@ struct ClientAppointmentsView: View {
     @State private var selectedTab = "Upcoming"
     
     var upcomingAppointments: [Appointment] {
-        bookingService.clientAppointments.filter {
-            $0.date >= Date() && ($0.status == .pending || $0.status == .confirmed)
-        }
+        bookingService.clientAppointments.filter { $0.isUpcoming }
+            .sorted { $0.appointmentDateTime < $1.appointmentDateTime }
     }
     
     var pastAppointments: [Appointment] {
         bookingService.clientAppointments.filter {
-            $0.date < Date() || $0.status == .completed || $0.status == .cancelled
-        }
+            $0.isPast || $0.status == .completed || $0.status == .cancelled
+        }.sorted { $0.appointmentDateTime > $1.appointmentDateTime }
     }
     
     var body: some View {
@@ -101,10 +108,10 @@ struct ProScheduleView: View {
     @ObservedObject var bookingService: BookingService
     @State private var selectedDate: Date = Date()
     
-    var todaysAppointments: [Appointment] {
-        bookingService.artistAppointments.filter {
-            Calendar.current.isDate($0.date, inSameDayAs: selectedDate) &&
-            ($0.status == .pending || $0.status == .confirmed)
+    var appointmentsForSelectedDate: [Appointment] {
+        bookingService.artistAppointments.filter { appointment in
+            Calendar.current.isDate(appointment.date, inSameDayAs: selectedDate) &&
+            (appointment.status == .pending || appointment.status == .confirmed)
         }.sorted { $0.timeSlot < $1.timeSlot }
     }
     
@@ -112,12 +119,16 @@ struct ProScheduleView: View {
         bookingService.artistAppointments.filter { $0.status == .pending }.count
     }
     
+    var totalUpcoming: Int {
+        bookingService.artistAppointments.filter { $0.isUpcoming }.count
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 // Stats
                 HStack(spacing: 12) {
-                    StatCard(title: "Today", value: "\(todaysAppointments.count)", color: KHOIColors.accentBrown)
+                    StatCard(title: "Upcoming", value: "\(totalUpcoming)", color: KHOIColors.accentBrown)
                     StatCard(title: "Pending", value: "\(pendingCount)", color: .orange)
                 }
                 .padding(.horizontal)
@@ -126,7 +137,7 @@ struct ProScheduleView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(0..<14, id: \.self) { offset in
-                            let date = Calendar.current.date(byAdding: .day, value: offset, to: Date())!
+                            let date = Calendar.current.date(byAdding: .day, value: offset, to: Calendar.current.startOfDay(for: Date()))!
                             ScheduleDatePill(
                                 date: date,
                                 isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
@@ -144,36 +155,42 @@ struct ProScheduleView: View {
                         .tracking(1.5)
                         .foregroundColor(KHOIColors.mutedText)
                     Spacer()
+                    Text("\(appointmentsForSelectedDate.count) appointment\(appointmentsForSelectedDate.count == 1 ? "" : "s")")
+                        .font(.system(size: 11))
+                        .foregroundColor(KHOIColors.mutedText)
                 }
                 .padding(.horizontal)
                 
-                // Appointments
-                if todaysAppointments.isEmpty {
+                // Appointments for selected date
+                if appointmentsForSelectedDate.isEmpty {
                     EmptyDayView()
                         .padding(.horizontal)
                 } else {
-                    ForEach(todaysAppointments) { apt in
+                    ForEach(appointmentsForSelectedDate) { apt in
                         ProAppointmentCard(
                             appointment: apt,
                             onConfirm: { bookingService.updateAppointmentStatus(appointmentId: apt.id, status: .confirmed) { _ in } },
-                            onCancel: { bookingService.cancelAppointment(appointmentId: apt.id, reason: "Cancelled") { _ in } }
+                            onCancel: { bookingService.cancelAppointment(appointmentId: apt.id, reason: "Cancelled by pro") { _ in } }
                         )
                         .padding(.horizontal)
                     }
                 }
+                
+                // Spacer at bottom
+                Color.clear.frame(height: 100)
             }
-            .padding(.vertical)
         }
     }
     
     private func hasAppointments(on date: Date) -> Bool {
-        bookingService.artistAppointments.contains {
-            Calendar.current.isDate($0.date, inSameDayAs: date) && ($0.status == .pending || $0.status == .confirmed)
+        bookingService.artistAppointments.contains { appointment in
+            Calendar.current.isDate(appointment.date, inSameDayAs: date) &&
+            (appointment.status == .pending || appointment.status == .confirmed)
         }
     }
 }
 
-// MARK: - Supporting Components
+// MARK: - Supporting Views
 
 struct AppointmentTabButton: View {
     let title: String
@@ -182,16 +199,16 @@ struct AppointmentTabButton: View {
     
     var body: some View {
         Button(action: action) {
-            Text(title.uppercased())
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .background(isSelected ? Color.white : Color.clear)
-                .foregroundColor(isSelected ? KHOIColors.darkText : KHOIColors.mutedText)
-                .cornerRadius(12)
-                .shadow(color: isSelected ? Color.black.opacity(0.05) : .clear, radius: 5)
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? KHOIColors.darkText : KHOIColors.mutedText)
+                Rectangle()
+                    .fill(isSelected ? KHOIColors.accentBrown : Color.clear)
+                    .frame(height: 2)
+            }
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -201,12 +218,16 @@ struct StatCard: View {
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 11, weight: .medium)).foregroundColor(KHOIColors.mutedText)
-            Text(value).font(.system(size: 28, weight: .bold)).foregroundColor(color)
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(color)
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(KHOIColors.mutedText)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
         .background(Color.white)
         .cornerRadius(12)
     }
@@ -216,16 +237,26 @@ struct ScheduleDatePill: View {
     let date: Date
     let isSelected: Bool
     let hasAppointments: Bool
-    let onTap: () -> Void
+    let action: () -> Void
     
     var body: some View {
-        Button(action: onTap) {
+        Button(action: action) {
             VStack(spacing: 4) {
-                Text(date.formatted(.dateTime.weekday(.abbreviated))).font(.system(size: 10, weight: .medium))
-                Text(date.formatted(.dateTime.day())).font(.system(size: 16, weight: .bold))
-                Circle().fill(hasAppointments ? KHOIColors.accentBrown : Color.clear).frame(width: 4, height: 4)
+                Text(date.formatted(.dateTime.weekday(.abbreviated)))
+                    .font(.system(size: 10, weight: .medium))
+                Text(date.formatted(.dateTime.day()))
+                    .font(.system(size: 16, weight: .bold))
+                if hasAppointments {
+                    Circle()
+                        .fill(isSelected ? .white : KHOIColors.accentBrown)
+                        .frame(width: 5, height: 5)
+                } else {
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 5, height: 5)
+                }
             }
-            .frame(width: 44, height: 64)
+            .frame(width: 48, height: 70)
             .background(isSelected ? KHOIColors.darkText : Color.clear)
             .foregroundColor(isSelected ? .white : KHOIColors.darkText)
             .cornerRadius(12)
@@ -253,9 +284,35 @@ struct ClientAppointmentCard: View {
                     .cornerRadius(8)
             }
             Divider()
-            HStack(spacing: 24) {
-                Label(appointment.formattedShortDate, systemImage: "calendar").font(.system(size: 13, weight: .medium))
-                Label(appointment.timeSlot, systemImage: "clock").font(.system(size: 13, weight: .medium))
+            HStack(spacing: 16) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12))
+                        .foregroundColor(KHOIColors.accentBrown)
+                    Text(appointment.formattedShortDate)
+                        .font(.system(size: 13, weight: .medium))
+                }
+                
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 12))
+                        .foregroundColor(KHOIColors.accentBrown)
+                    Text(appointment.timeSlot)
+                        .font(.system(size: 13, weight: .medium))
+                }
+                
+                Spacer()
+                
+                Text(appointment.formattedDuration)
+                    .font(.system(size: 11))
+                    .foregroundColor(KHOIColors.mutedText)
+            }
+            
+            HStack {
+                Spacer()
+                Text(appointment.formattedPrice)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(KHOIColors.accentBrown)
             }
         }
         .padding()
@@ -274,6 +331,11 @@ struct ProAppointmentCard: View {
         VStack(spacing: 0) {
             HStack {
                 Text(appointment.timeSlot).font(.system(size: 13, weight: .bold)).foregroundColor(KHOIColors.accentBrown)
+                if !appointment.endTime.isEmpty {
+                    Text("- \(appointment.endTime)")
+                        .font(.system(size: 11))
+                        .foregroundColor(KHOIColors.mutedText)
+                }
                 Rectangle().fill(KHOIColors.accentBrown.opacity(0.3)).frame(height: 1)
             }
             .padding(.bottom, 8)

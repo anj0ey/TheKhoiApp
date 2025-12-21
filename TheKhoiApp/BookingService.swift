@@ -54,23 +54,34 @@ class BookingService: ObservableObject {
         
         appointmentsListener?.remove()
         
+        print("DEBUG: Fetching appointments for artistId: \(artistId)")
+        
+        // Simple query - just filter by artistId, sort locally
         appointmentsListener = db.collection("appointments")
             .whereField("artistId", isEqualTo: artistId)
-            .order(by: "date", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
                 self?.isLoading = false
                 
                 if let error = error {
                     self?.errorMessage = error.localizedDescription
+                    print("DEBUG ERROR: \(error.localizedDescription)")
                     return
                 }
                 
                 guard let documents = snapshot?.documents else {
+                    print("DEBUG: No documents returned")
                     self?.artistAppointments = []
                     return
                 }
                 
-                self?.artistAppointments = documents.compactMap { Appointment.fromFirestore(document: $0) }
+                print("DEBUG: Found \(documents.count) documents")
+                
+                let appointments = documents.compactMap { Appointment.fromFirestore(document: $0) }
+                
+                // Sort locally by date
+                self?.artistAppointments = appointments.sorted { $0.date < $1.date }
+                
+                print("DEBUG: Loaded \(self?.artistAppointments.count ?? 0) appointments")
             }
     }
     
@@ -79,29 +90,34 @@ class BookingService: ObservableObject {
     func fetchClientAppointments(clientId: String) {
         isLoading = true
         
+        print("DEBUG: Fetching client appointments for clientId: \(clientId)")
+        
         db.collection("appointments")
             .whereField("clientId", isEqualTo: clientId)
-            .order(by: "date", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
                 self?.isLoading = false
                 
                 if let error = error {
                     self?.errorMessage = error.localizedDescription
+                    print("DEBUG ERROR: \(error.localizedDescription)")
                     return
                 }
                 
                 guard let documents = snapshot?.documents else {
+                    print("DEBUG: No documents returned for client")
                     self?.clientAppointments = []
                     return
                 }
                 
-                self?.clientAppointments = documents.compactMap { Appointment.fromFirestore(document: $0) }
+                print("DEBUG: Found \(documents.count) client documents")
+                
+                let appointments = documents.compactMap { Appointment.fromFirestore(document: $0) }
+                self?.clientAppointments = appointments.sorted { $0.date < $1.date }
             }
     }
     
     // MARK: - Check Availability
     
-    /// Check if artist has any appointments on a specific date and time
     func checkAvailability(
         artistId: String,
         date: Date,
@@ -109,7 +125,6 @@ class BookingService: ObservableObject {
         duration: Int,
         completion: @escaping (Bool) -> Void
     ) {
-        // Get start of day for the selected date
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
@@ -127,27 +142,23 @@ class BookingService: ObservableObject {
                 }
                 
                 guard let documents = snapshot?.documents else {
-                    completion(true) // No appointments = available
+                    completion(true)
                     return
                 }
                 
-                // Check if any existing appointment overlaps with the requested time
                 let existingAppointments = documents.compactMap { Appointment.fromFirestore(document: $0) }
                 
                 for appointment in existingAppointments {
                     if appointment.timeSlot == timeSlot {
-                        completion(false) // Same time slot = not available
+                        completion(false)
                         return
                     }
-                    
-                    // TODO: Add more sophisticated overlap checking based on duration
                 }
                 
-                completion(true) // No conflicts found
+                completion(true)
             }
     }
     
-    /// Get all booked time slots for an artist on a specific date
     func getBookedSlots(
         artistId: String,
         date: Date,
@@ -208,7 +219,6 @@ class BookingService: ObservableObject {
             if let error = error {
                 completion(.failure(error))
             } else {
-                // Fetch the full appointment to send notifications
                 self?.db.collection("appointments").document(appointmentId).getDocument { snapshot, _ in
                     if let appointment = snapshot.flatMap({ Appointment.fromFirestore(document: $0) }) {
                         switch status {
@@ -240,7 +250,6 @@ class BookingService: ObservableObject {
             "updatedAt": Timestamp(date: Date())
         ]
         
-        // First fetch the appointment for notification
         db.collection("appointments").document(appointmentId).getDocument { [weak self] snapshot, error in
             guard let self = self else { return }
             
@@ -250,13 +259,11 @@ class BookingService: ObservableObject {
                 if let error = error {
                     completion(.failure(error))
                 } else {
-                    // Send cancellation notification
                     if let appointment = appointment {
                         NotificationService.shared.sendBookingCancelledNotification(
                             appointment: appointment,
                             reason: reason
                         )
-                        // Cancel any scheduled reminders
                         NotificationService.shared.cancelAppointmentReminders(appointmentId: appointmentId)
                     }
                     completion(.success(()))
@@ -329,7 +336,6 @@ class BookingService: ObservableObject {
             .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: startOfDay))
             .whereField("date", isLessThan: Timestamp(date: endOfDay))
             .whereField("status", in: ["pending", "confirmed"])
-            .order(by: "date")
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("Error getting today's appointments: \(error)")
@@ -338,7 +344,7 @@ class BookingService: ObservableObject {
                 }
                 
                 let appointments = snapshot?.documents.compactMap { Appointment.fromFirestore(document: $0) } ?? []
-                completion(appointments)
+                completion(appointments.sorted { $0.date < $1.date })
             }
     }
     

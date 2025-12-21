@@ -209,6 +209,40 @@ class FeedService: ObservableObject {
         }
     }
     
+    /// Fetch posts by IDs with completion handler (for viewing other users' saved posts)
+    func fetchPostsByIds(_ postIds: [String], completion: @escaping ([Post]) -> Void) {
+        guard !postIds.isEmpty else {
+            completion([])
+            return
+        }
+        
+        // Firestore 'in' query limited to 10 items, so batch if needed
+        let batches = postIds.chunked(into: 10)
+        var allPosts: [Post] = []
+        let group = DispatchGroup()
+        
+        for batch in batches {
+            group.enter()
+            db.collection("posts")
+                .whereField(FieldPath.documentID(), in: batch)
+                .getDocuments { snapshot, error in
+                    defer { group.leave() }
+                    
+                    if let error = error {
+                        print("Error fetching posts by IDs: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    let posts = snapshot?.documents.compactMap { Post(document: $0) } ?? []
+                    allPosts.append(contentsOf: posts)
+                }
+        }
+        
+        group.notify(queue: .main) {
+            completion(allPosts)
+        }
+    }
+    
     /// Update local posts array saveCount for immediate UI feedback
     private func updateLocalPostSaveCount(postId: String, increment: Bool) {
         DispatchQueue.main.async {

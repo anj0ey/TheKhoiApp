@@ -77,7 +77,39 @@ struct Appointment: Identifiable, Codable {
     var cancelledAt: Date?
     var cancelReason: String?
     
-    // Computed properties
+    // MARK: - Computed Properties
+    
+    /// Full appointment datetime combining date and timeSlot
+    var appointmentDateTime: Date {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        
+        guard let time = formatter.date(from: timeSlot) else { return date }
+        
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+        
+        var combined = DateComponents()
+        combined.year = dateComponents.year
+        combined.month = dateComponents.month
+        combined.day = dateComponents.day
+        combined.hour = timeComponents.hour
+        combined.minute = timeComponents.minute
+        
+        return calendar.date(from: combined) ?? date
+    }
+    
+    /// Check if appointment is in the past (based on actual appointment time, not just date)
+    var isPast: Bool {
+        return appointmentDateTime < Date()
+    }
+    
+    /// Check if appointment is upcoming
+    var isUpcoming: Bool {
+        return !isPast && (status == .pending || status == .confirmed)
+    }
+    
     var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateStyle = .long
@@ -86,7 +118,13 @@ struct Appointment: Identifiable, Codable {
     
     var formattedShortDate: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+    
+    var formattedDateWithWeekday: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d"
         return formatter.string(from: date)
     }
     
@@ -323,6 +361,19 @@ class BookingState: ObservableObject {
         guard let endDate = Calendar.current.date(byAdding: .minute, value: service.duration, to: startDate) else { return "" }
         
         return formatter.string(from: endDate)
+    }
+    
+    /// Get the properly combined date with time for storing
+    var appointmentDate: Date {
+        guard let slot = selectedTimeSlot else { return selectedDate }
+        
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+        components.hour = slot.hour
+        components.minute = slot.minute
+        components.second = 0
+        
+        return calendar.date(from: components) ?? selectedDate
     }
     
     func reset() {
