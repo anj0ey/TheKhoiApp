@@ -23,6 +23,7 @@ struct Artist: Identifiable {
     var servicesDetailed: [ServiceItem]  // Full service details from pro application
     var portfolioImages: [PortfolioImage]  // Portfolio images from pro application
     var policies: BusinessPolicies?  // Business policies from pro application
+    var availability: BusinessAvailability?
     var city: String
     var instagram: String?
     var website: String?
@@ -82,7 +83,8 @@ struct Artist: Identifiable {
         reviewCount: Int = 0,
         rating: Double? = nil,
         verified: Bool = false,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        availability: BusinessAvailability? = nil,
     ) {
         self.id = id
         self.fullName = fullName
@@ -107,6 +109,7 @@ struct Artist: Identifiable {
         self.rating = rating
         self.verified = verified
         self.createdAt = createdAt
+        self.availability = availability
     }
 }
 
@@ -181,6 +184,13 @@ extension Artist {
             self.policies = nil
         }
         
+        // Parse Availability
+        if let availabilityData = data["availability"] as? [String: Any] {
+            self.availability = BusinessAvailability.fromFirestore(availabilityData)
+        } else {
+            self.availability = nil
+        }
+        
         self.city = data["city"] as? String ?? data["location"] as? String ?? ""
         self.instagram = data["instagram"] as? String
         self.website = data["website"] as? String
@@ -240,7 +250,9 @@ extension Artist {
         if let rating = rating {
             data["rating"] = rating
         }
-        
+        if let availability = availability {
+            data["availability"] = availability.toFirestoreData()
+        }
         return data
     }
 }

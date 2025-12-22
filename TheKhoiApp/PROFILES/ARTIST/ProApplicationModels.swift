@@ -2,7 +2,6 @@
 //  ProApplicationModels.swift
 //  TheKhoiApp
 //
-//  Data models for pro/business applications
 //
 
 import Foundation
@@ -164,7 +163,10 @@ struct ProApplication: Identifiable, Codable {
     // Step 4: Portfolio
     var portfolioImages: [PortfolioImage] = []
     
-    // Step 5: Verification
+    // Step 5: Availability (NEW)
+    var availability: BusinessAvailability = BusinessAvailability()
+    
+    // Step 6: Verification
     var instagramHandle: String = ""
     var businessProofURL: String?
     var businessProofType: BusinessProofType?
@@ -195,11 +197,16 @@ struct ProApplication: Identifiable, Codable {
     }
     
     var isStep5Valid: Bool {
+        // At least one day must be open
+        availability.allDays.contains { $0.availability.isOpen }
+    }
+    
+    var isStep6Valid: Bool {
         !instagramHandle.isEmpty || businessProofURL != nil
     }
     
     var isReadyToSubmit: Bool {
-        isStep1Valid && isStep2Valid && isStep4Valid && isStep5Valid
+        isStep1Valid && isStep2Valid && isStep4Valid && isStep5Valid && isStep6Valid
     }
     
     // Get unique service categories
@@ -218,6 +225,7 @@ struct ProApplication: Identifiable, Codable {
             "services": services.map { $0.toFirestoreData() },
             "policies": policies.toFirestoreData(),
             "portfolioImages": portfolioImages.map { $0.toFirestoreData() },
+            "availability": availability.toFirestoreData(),
             "instagramHandle": instagramHandle
         ]
         
@@ -272,6 +280,10 @@ struct ProApplication: Identifiable, Codable {
         
         if let portfolioData = data["portfolioImages"] as? [[String: Any]] {
             app.portfolioImages = portfolioData.map { PortfolioImage.fromFirestore($0) }
+        }
+        
+        if let availabilityData = data["availability"] as? [String: Any] {
+            app.availability = BusinessAvailability.fromFirestore(availabilityData)
         }
         
         app.instagramHandle = data["instagramHandle"] as? String ?? ""

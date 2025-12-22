@@ -2,7 +2,7 @@
 //  OnboardingView.swift
 //  TheKhoiApp
 //
-//  Updated with Email authentication instead of Apple Sign In
+// Initial Onboarding to App -> Profile Set up
 //
 
 import SwiftUI

@@ -1,7 +1,7 @@
 //
 //  EditProfileView.swift
 //  TheKhoiApp
-//
+//  Edit Profile From Settings
 //
 
 import SwiftUI

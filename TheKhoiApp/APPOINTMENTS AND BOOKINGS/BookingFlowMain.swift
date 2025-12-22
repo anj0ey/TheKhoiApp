@@ -7,6 +7,8 @@
 
 import SwiftUI
 import PhotosUI
+import FirebaseStorage
+import FirebaseFirestore
 
 struct BookingFlowView: View {
     let artist: Artist
@@ -20,6 +22,8 @@ struct BookingFlowView: View {
     @State private var showConfirmation = false
     @State private var isSubmitting = false
     @State private var bookedSlots: [String] = []
+    
+    @State private var artistAvailability: BusinessAvailability? = nil
     
     var body: some View {
         ZStack {
@@ -659,10 +663,38 @@ struct BookingFlowView: View {
         }
     }
     
+    private func isDateAvailable(_ date: Date) -> Bool {
+        guard let availability = artistAvailability else { return true }
+        return availability.availability(for: date).isOpen
+    }
+    
+    private func fetchArtistAvailability() {
+        let db = Firestore.firestore()
+        
+        // First try artists collection
+        db.collection("artists").document(artist.id).getDocument { snapshot, error in
+            if let data = snapshot?.data(),
+               let availData = data["availability"] as? [String: Any] {
+                self.artistAvailability = BusinessAvailability.fromFirestore(availData)
+            } else {
+                // Try pro_applications collection
+                db.collection("pro_applications").document(artist.id).getDocument { snapshot, _ in
+                    if let data = snapshot?.data(),
+                       let availData = data["availability"] as? [String: Any] {
+                        self.artistAvailability = BusinessAvailability.fromFirestore(availData)
+                    }
+                }
+            }
+        }
+    }
+    
     private func generateTimeSlots(start: Int, end: Int) -> [TimeSlot] {
         var slots: [TimeSlot] = []
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
+        
+        // Get availability for selected date
+        let dayAvailability = artistAvailability?.availability(for: bookingState.selectedDate)
         
         for hour in start..<end {
             for minute in [0, 15, 30, 45] {
@@ -672,17 +704,32 @@ struct BookingFlowView: View {
                 
                 if let date = Calendar.current.date(from: components) {
                     let timeString = formatter.string(from: date)
+                    
+                    // Check if slot is within artist's availability
+                    var isWithinAvailability = true
+                    if let avail = dayAvailability {
+                        if !avail.isOpen {
+                            isWithinAvailability = false
+                        } else {
+                            let slotMinutes = hour * 60 + minute
+                            let startMinutes = avail.startHour * 60 + avail.startMinute
+                            let endMinutes = avail.endHour * 60 + avail.endMinute
+                            isWithinAvailability = slotMinutes >= startMinutes && slotMinutes < endMinutes
+                        }
+                    }
+                    
                     slots.append(TimeSlot(
                         time: timeString,
                         hour: hour,
                         minute: minute,
-                        isAvailable: !bookedSlots.contains(timeString)
+                        isAvailable: !bookedSlots.contains(timeString) && isWithinAvailability
                     ))
                 }
             }
         }
         return slots
     }
+
     
     private func submitBooking() {
         guard let service = bookingState.selectedService,
@@ -935,28 +982,35 @@ struct ExploreServiceCard: View {
 struct DatePill: View {
     let date: Date
     let isSelected: Bool
+    var isAvailable: Bool = true
     let onTap: () -> Void
     
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 4) {
                 Text(date.formatted(.dateTime.weekday(.abbreviated)))
-                    .font(.system(size: 11, weight: .medium))
-                
+                    .font(.system(size: 10, weight: .medium))
                 Text(date.formatted(.dateTime.day()))
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
+                
+                // Availability indicator
+                Circle()
+                    .fill(isAvailable ? (isSelected ? .white : KHOIColors.accentBrown) : Color.clear)
+                    .frame(width: 5, height: 5)
             }
-            .frame(width: 44, height: 60)
+            .frame(width: 48, height: 70)
             .background(isSelected ? KHOIColors.darkText : Color.clear)
-            .foregroundColor(isSelected ? .white : KHOIColors.mutedText)
+            .foregroundColor(isSelected ? .white : (isAvailable ? KHOIColors.darkText : KHOIColors.mutedText))
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+                    .stroke(isSelected ? Color.clear : Color.gray.opacity(0.15), lineWidth: 1)
             )
+            .opacity(isAvailable ? 1.0 : 0.5)
         }
     }
 }
+
 
 struct TimeSlotSection: View {
     let title: String
@@ -1029,66 +1083,175 @@ struct InspoUploadGrid: View {
     @Binding var images: [String]
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var isUploading = false
+    @State private var uploadProgress: Int = 0
     
     let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
     
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(0..<6, id: \.self) { index in
-                if index < images.count {
-                    // Show uploaded image
-                    AsyncImage(url: URL(string: images[index])) { img in
-                        img.resizable().scaledToFill()
-                    } placeholder: {
-                        Rectangle().fill(Color.gray.opacity(0.2))
-                    }
-                    .frame(height: 100)
-                    .clipped()
-                    .cornerRadius(8)
-                    .overlay(
-                        Button(action: {
-                            images.remove(at: index)
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.white)
-                                .shadow(radius: 2)
-                        }
-                        .padding(4),
-                        alignment: .topTrailing
-                    )
-                } else {
-                    // Upload placeholder
-                    PhotosPicker(selection: $selectedItems, maxSelectionCount: 6 - images.count, matching: .images) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "camera")
-                                .font(.system(size: 20))
-                                .foregroundColor(KHOIColors.mutedText)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 100)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(style: StrokeStyle(lineWidth: 1, dash: [5]))
-                                .foregroundColor(Color.gray.opacity(0.3))
-                        )
-                    }
-                    .onChange(of: selectedItems) { newItems in
-                        // Handle image upload (simplified - would need actual upload)
-                        Task {
-                            for item in newItems {
-                                if let data = try? await item.loadTransferable(type: Data.self) {
-                                    // For now, just use a placeholder URL
-                                    // In production, upload to Firebase Storage
-                                    images.append("placeholder_\(UUID().uuidString)")
+        VStack(spacing: 12) {
+            // Upload progress indicator
+            if isUploading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Uploading \(uploadProgress) image\(uploadProgress == 1 ? "" : "s")...")
+                        .font(.system(size: 12))
+                        .foregroundColor(KHOIColors.mutedText)
+                }
+                .padding(.bottom, 4)
+            }
+            
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(0..<6, id: \.self) { index in
+                    if index < images.count {
+                        // Show uploaded image
+                        ZStack {
+                            AsyncImage(url: URL(string: images[index])) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .overlay(ProgressView().scaleEffect(0.7))
+                                case .success(let img):
+                                    img.resizable().scaledToFill()
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .overlay(
+                                            Image(systemName: "exclamationmark.triangle")
+                                                .foregroundColor(.orange)
+                                        )
+                                @unknown default:
+                                    Rectangle().fill(Color.gray.opacity(0.2))
                                 }
                             }
-                            selectedItems = []
+                            .frame(height: 100)
+                            .clipped()
+                            .cornerRadius(8)
+                            
+                            // Remove button
+                            Button(action: {
+                                withAnimation {
+                                    if index < images.count {
+                                        images.remove(at: index)
+                                    }
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 2)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(6)
                         }
+                        .frame(height: 100)
+                    } else if index == images.count && !isUploading {
+                        // Show single upload button at next available slot
+                        PhotosPicker(
+                            selection: $selectedItems,
+                            maxSelectionCount: 6 - images.count,
+                            matching: .images
+                        ) {
+                            VStack(spacing: 8) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(KHOIColors.accentBrown)
+                                Text("Add")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(KHOIColors.mutedText)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 100)
+                            .background(Color.gray.opacity(0.08))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(KHOIColors.accentBrown.opacity(0.3), lineWidth: 1.5)
+                            )
+                        }
+                        .onChange(of: selectedItems) { newItems in
+                            handleImageSelection(newItems)
+                        }
+                    } else {
+                        // Empty placeholder slots
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.05))
+                            .frame(height: 100)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [5]))
+                                    .foregroundColor(Color.gray.opacity(0.2))
+                            )
                     }
                 }
             }
+        }
+    }
+    
+    private func handleImageSelection(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        
+        isUploading = true
+        uploadProgress = items.count
+        
+        Task {
+            for item in items {
+                do {
+                    if let data = try await item.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        // Upload to Firebase Storage
+                        await uploadImageToStorage(uiImage)
+                    }
+                } catch {
+                    print("Error loading image: \(error)")
+                }
+            }
+            
+            await MainActor.run {
+                selectedItems = []
+                isUploading = false
+                uploadProgress = 0
+            }
+        }
+    }
+    
+    private func uploadImageToStorage(_ image: UIImage) async {
+        // Compress and resize image
+        let maxSize: CGFloat = 1024
+        var processedImage = image
+        
+        if image.size.width > maxSize || image.size.height > maxSize {
+            let scale = min(maxSize / image.size.width, maxSize / image.size.height)
+            let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+            if let resized = UIGraphicsGetImageFromCurrentImageContext() {
+                processedImage = resized
+            }
+            UIGraphicsEndImageContext()
+        }
+        
+        guard let imageData = processedImage.jpegData(compressionQuality: 0.7) else {
+            print("Failed to compress image")
+            return
+        }
+        
+        let imageId = UUID().uuidString
+        let path = "inspo_images/\(imageId).jpg"
+        let storageRef = Storage.storage().reference().child(path)
+        
+        do {
+            let _ = try await storageRef.putDataAsync(imageData)
+            let url = try await storageRef.downloadURL()
+            
+            await MainActor.run {
+                if images.count < 6 {
+                    images.append(url.absoluteString)
+                }
+            }
+        } catch {
+            print("Error uploading image: \(error)")
         }
     }
 }
@@ -1125,3 +1288,4 @@ struct CheckboxToggleStyle: ToggleStyle {
         }
     }
 }
+

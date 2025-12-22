@@ -1,7 +1,7 @@
 //
 //  ProfileSetupView.swift
 //  TheKhoiApp
-//
+//  Setting up profile during initial onboarding
 //
 
 import SwiftUI

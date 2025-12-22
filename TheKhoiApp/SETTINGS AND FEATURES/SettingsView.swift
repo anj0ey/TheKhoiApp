@@ -2,13 +2,11 @@
 //  SettingsView.swift
 //  TheKhoiApp
 //
-//  Settings with Edit Profile navigation
 //
 
 import SwiftUI
 import SafariServices
 
-// open link in app
 struct SafariWebView: UIViewControllerRepresentable {
     let url: URL
 
@@ -26,28 +24,20 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var pushNotifications = true
-    @State private var marketingEmails = false
-    
-    // Delete account state
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
     @State private var deleteError: String?
-    
-    //Safari Viewing
     @State private var showPrivacyPolicy = false
     @State private var showTermsOfService = false
 
-    private let privacyPolicyURL = URL(string: "https://cut-termite-d3e.notion.site/Privacy-Policy-for-KHOI-2c7c7965dce380b5a36ee7c5c168ccc5?source=copy_link")!
-    private let termsOfServiceURL = URL(string: "https://cut-termite-d3e.notion.site/KHOI-Terms-and-Conditions-2d0c7965dce380d1b195dce0e5ae1aff?source=copy_link")!
+    private let privacyPolicyURL = URL(string: "https://cut-termite-d3e.notion.site/Privacy-Policy-for-KHOI-2c7c7965dce380b5a36ee7c5c168ccc5")!
+    private let termsOfServiceURL = URL(string: "https://cut-termite-d3e.notion.site/KHOI-Terms-and-Conditions-2d0c7965dce380d1b195dce0e5ae1aff")!
     
     private func openSupportEmail() {
         let email = "khoiqnguyen27@gmail.com"
         let subject = "KHOI Support"
         let body = "Hi KHOI Team,"
-
-        let mailtoString =
-            "mailto:\(email)?subject=\(subject)&body=\(body)"
-
+        let mailtoString = "mailto:\(email)?subject=\(subject)&body=\(body)"
         if let encoded = mailtoString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
            let url = URL(string: encoded) {
             UIApplication.shared.open(url)
@@ -56,23 +46,19 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            KHOIColors.background
-                .ignoresSafeArea()
+            KHOIColors.background.ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: KHOITheme.spacing_lg) {
-                    
                     Spacer()
                     
-                    // MARK: - Title
+                    // Title
                     HStack {
                         Text("SETTINGS")
                             .font(KHOITheme.headline)
                             .foregroundColor(KHOIColors.mutedText)
                             .tracking(2)
-                        
                         Spacer()
-                        
                         Button(action: { dismiss() }) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 16, weight: .semibold))
@@ -96,30 +82,24 @@ struct SettingsView: View {
                         SettingsCard {
                             VStack(spacing: 0) {
                                 if let user = authManager.currentUser {
-                                    SettingsValueRow(
-                                        title: "Name",
-                                        value: user.fullName
-                                    )
-
+                                    SettingsValueRow(title: "Name", value: user.fullName)
                                     Divider()
-
-                                    SettingsValueRow(
-                                        title: "Username",
-                                        value: "@\(user.username)"
-                                    )
-
+                                    SettingsValueRow(title: "Username", value: "@\(user.username)")
                                     Divider()
-                                    
-                                    SettingsValueRow(
-                                        title: "Email",
-                                        value: user.email
-                                    )
-
+                                    SettingsValueRow(title: "Email", value: user.email)
                                     Divider()
                                 }
 
                                 NavigationLink(destination: EditProfileView().environmentObject(authManager)) {
                                     SettingsChevronRow(title: "Edit profile")
+                                }
+                                
+                                // Show Edit Business Account for verified pros
+                                if authManager.isBusinessMode {
+                                    Divider()
+                                    NavigationLink(destination: EditBusinessAccountView().environmentObject(authManager)) {
+                                        SettingsChevronRow(title: "Edit Business Account")
+                                    }
                                 }
                             }
                         }
@@ -134,12 +114,7 @@ struct SettingsView: View {
                             .padding(.horizontal, KHOITheme.spacing_md)
 
                         SettingsCard {
-                            VStack(spacing: 0) {
-                                SettingsToggleRow(
-                                    title: "Push notifications",
-                                    isOn: $pushNotifications
-                                )
-                            }
+                            SettingsToggleRow(title: "Push notifications", isOn: $pushNotifications)
                         }
                     }
 
@@ -153,29 +128,18 @@ struct SettingsView: View {
 
                         SettingsCard {
                             VStack(spacing: 0) {
-                                Button {
-                                    openSupportEmail()
-                                } label: {
+                                Button { openSupportEmail() } label: {
                                     SettingsChevronRow(title: "Contact Support")
                                 }
-                                
                                 Divider()
-                                
-                                Button {
-                                    showPrivacyPolicy = true
-                                } label: {
+                                Button { showPrivacyPolicy = true } label: {
                                     SettingsChevronRow(title: "Privacy Policy")
                                 }
                                 .sheet(isPresented: $showPrivacyPolicy) {
                                     SafariWebView(url: privacyPolicyURL)
                                 }
-
-                                
                                 Divider()
-                                
-                                Button {
-                                    showTermsOfService = true
-                                } label: {
+                                Button { showTermsOfService = true } label: {
                                     SettingsChevronRow(title: "Terms of Service")
                                 }
                                 .sheet(isPresented: $showTermsOfService) {
@@ -207,9 +171,7 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             if isDeleting {
-                                ProgressView()
-                                    .tint(KHOIColors.danger)
-                                    .scaleEffect(0.8)
+                                ProgressView().tint(KHOIColors.danger).scaleEffect(0.8)
                             }
                             Text(isDeleting ? "Deleting..." : "Delete account")
                                 .font(KHOITheme.body)
@@ -221,7 +183,6 @@ struct SettingsView: View {
                     .disabled(isDeleting)
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // Error message
                     if let error = deleteError {
                         Text(error)
                             .font(KHOITheme.caption)
@@ -237,58 +198,48 @@ struct SettingsView: View {
         .navigationBarHidden(true)
         .alert("Delete Account", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteAccount()
-            }
+            Button("Delete", role: .destructive) { deleteAccount() }
         } message: {
-            Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.")
+            Text("Are you sure you want to delete your account? This action cannot be undone.")
         }
     }
-    
-    // MARK: - Delete Account Action
     
     private func deleteAccount() {
         isDeleting = true
         deleteError = nil
-        
         authManager.deleteAccount { success, error in
             isDeleting = false
-            
-            if success {
-                dismiss()
-            } else {
-                deleteError = error
-            }
+            if success { dismiss() } else { deleteError = error }
         }
     }
 }
 
-// MARK: - Reusable components
+// MARK: - Reusable Components
 
 private struct SettingsCard<Content: View>: View {
     @ViewBuilder var content: Content
-
     var body: some View {
-        VStack {
-            content
-        }
-        .padding(.horizontal, KHOITheme.spacing_md)
-        .padding(.vertical, KHOITheme.spacing_sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KHOIColors.cardBackground)
-        .cornerRadius(KHOITheme.radius_lg)
-        .padding(.horizontal, KHOITheme.spacing_md)
+        VStack { content }
+            .padding(.horizontal, KHOITheme.spacing_md)
+            .padding(.vertical, KHOITheme.spacing_sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KHOIColors.cardBackground)
+            .cornerRadius(KHOITheme.radius_lg)
+            .padding(.horizontal, KHOITheme.spacing_md)
     }
 }
 
 private struct SettingsChevronRow: View {
     let title: String
-
+    var icon: String? = nil
     var body: some View {
         HStack {
-            Text(title)
-                .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.darkText)
+            if let icon = icon {
+                Image(systemName: icon)
+                    .foregroundColor(KHOIColors.accentBrown)
+                    .frame(width: 20)
+            }
+            Text(title).font(KHOITheme.body).foregroundColor(KHOIColors.darkText)
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
@@ -302,19 +253,11 @@ private struct SettingsChevronRow: View {
 private struct SettingsValueRow: View {
     let title: String
     let value: String
-
     var body: some View {
         HStack {
-            Text(title)
-                .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.mutedText)
-
+            Text(title).font(KHOITheme.body).foregroundColor(KHOIColors.mutedText)
             Spacer()
-
-            Text(value)
-                .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.darkText)
-                .lineLimit(1)
+            Text(value).font(KHOITheme.body).foregroundColor(KHOIColors.darkText).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, KHOITheme.spacing_sm)
@@ -324,27 +267,14 @@ private struct SettingsValueRow: View {
 private struct SettingsToggleRow: View {
     let title: String
     @Binding var isOn: Bool
-
     var body: some View {
         HStack {
-            Text(title)
-                .font(KHOITheme.body)
-                .foregroundColor(KHOIColors.darkText)
-
+            Text(title).font(KHOITheme.body).foregroundColor(KHOIColors.darkText)
             Spacer()
-
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .tint(KHOIColors.accentBrown)
+            Toggle("", isOn: $isOn).labelsHidden().tint(KHOIColors.accentBrown)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, KHOITheme.spacing_sm)
     }
 }
 
-#Preview {
-    NavigationStack {
-        SettingsView()
-            .environmentObject(AuthManager())
-    }
-}

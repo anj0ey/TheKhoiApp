@@ -14,9 +14,9 @@ struct ProOnboardingView: View {
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) var dismiss
     
-    // Current step (1-6)
+    // Current step (1-7)
     @State private var currentStep = 1
-    let totalSteps = 6
+    let totalSteps = 7
     
     // Application data
     @State private var application: ProApplication
@@ -58,11 +58,14 @@ struct ProOnboardingView: View {
                         Step4PortfolioView(application: $application, onNext: nextStep, onBack: previousStep)
                             .tag(4)
                         
-                        Step5VerificationView(application: $application, onNext: nextStep, onBack: previousStep)
+                        Step5AvailabilityView(application: $application, onNext: nextStep, onBack: previousStep)
                             .tag(5)
                         
-                        Step6ReviewView(application: $application, onSubmit: submitApplication, onBack: previousStep, isLoading: isLoading)
+                        Step6VerificationView(application: $application, onNext: nextStep, onBack: previousStep)
                             .tag(6)
+                        
+                        Step7ReviewView(application: $application, onSubmit: submitApplication, onBack: previousStep, isLoading: isLoading)
+                            .tag(7)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .animation(.easeInOut, value: currentStep)
@@ -131,8 +134,9 @@ struct ProOnboardingView: View {
         case 2: return "Your Services"
         case 3: return "Business Policies"
         case 4: return "Portfolio"
-        case 5: return "Verification"
-        case 6: return "Review & Submit"
+        case 5: return "Availability"
+        case 6: return "Verification"
+        case 7: return "Review & Submit"
         default: return ""
         }
     }
@@ -738,8 +742,8 @@ struct Step4PortfolioView: View {
     }
 }
 
-// MARK: - Step 5: Verification
-struct Step5VerificationView: View {
+// MARK: - Step 6: Verification
+struct Step6VerificationView: View {
     @Binding var application: ProApplication
     let onNext: () -> Void
     let onBack: () -> Void
@@ -941,8 +945,8 @@ struct Step5VerificationView: View {
     }
 }
 
-// MARK: - Step 6: Review
-struct Step6ReviewView: View {
+// MARK: - Step 7: Review
+struct Step7ReviewView: View {
     @Binding var application: ProApplication
     let onSubmit: () -> Void
     let onBack: () -> Void
@@ -1014,6 +1018,31 @@ struct Step6ReviewView: View {
                                         .cornerRadius(8)
                                 }
                             }
+                        }
+                    }
+                }
+                
+                //Availability Card
+                reviewCard(title: "Availability", icon: "clock.fill") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(application.availability.allDays, id: \.weekday) { day in
+                            if day.availability.isOpen {
+                                HStack {
+                                    Text(day.shortName)
+                                        .font(KHOITheme.body)
+                                        .frame(width: 40, alignment: .leading)
+                                    Text("\(day.availability.startTime) - \(day.availability.endTime)")
+                                        .font(KHOITheme.caption)
+                                        .foregroundColor(KHOIColors.mutedText)
+                                }
+                            }
+                        }
+                        
+                        let openDays = application.availability.allDays.filter { $0.availability.isOpen }.count
+                        if openDays == 0 {
+                            Text("No availability set")
+                                .font(KHOITheme.caption)
+                                .foregroundColor(KHOIColors.mutedText)
                         }
                     }
                 }
