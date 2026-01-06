@@ -343,8 +343,6 @@ struct MasonryGrid<Content: View, T: Identifiable>: View {
     }
 }
 
-// MARK: - OnboardingView is now in OnboardingView.swift
-
 // MARK: - Home View Model
 class HomeViewModel: ObservableObject {
     @Published var posts: [Post] = []

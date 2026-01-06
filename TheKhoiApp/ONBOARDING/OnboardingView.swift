@@ -7,6 +7,7 @@
 
 import SwiftUI
 import GoogleSignIn
+import AuthenticationServices
 
 // MARK: - Onboarding View
 struct OnboardingView: View {
@@ -22,7 +23,7 @@ struct OnboardingView: View {
             Image("background")
                 .resizable()
                 .scaledToFit()
-                .offset(y: 350)
+                .offset(y: 355)
                 .ignoresSafeArea()
                 .zIndex(0)
             
@@ -124,6 +125,19 @@ struct OnboardingView: View {
                             .frame(height: 1)
                     }
                     .padding(.vertical, 8)
+                    
+                    // Sign in with Apple button
+                    SignInWithAppleButton(
+                        onRequest: { request in
+                            authManager.handleAppleRequest(request)
+                        },
+                        onCompletion: { result in
+                            authManager.handleAppleCompletion(result)
+                        }
+                    )
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 50)
+                    .cornerRadius(KHOITheme.cornerRadius_md)
                     
                     // Continue with Google button
                     Button {

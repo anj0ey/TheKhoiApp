@@ -52,6 +52,9 @@ struct BookingFlowView: View {
                     .zIndex(100)
             }
         }
+        .onAppear {
+            fetchArtistAvailability()
+        }
     }
     
     // MARK: - Header
@@ -298,51 +301,77 @@ struct BookingFlowView: View {
                         ForEach(0..<14) { index in
                             let date = Calendar.current.date(byAdding: .day, value: index, to: Date())!
                             let isSelected = Calendar.current.isDate(date, inSameDayAs: bookingState.selectedDate)
+                            let dateAvailable = isDateAvailable(date)  // CHECK AVAILABILITY
                             
-                            DatePill(date: date, isSelected: isSelected) {
-                                bookingState.selectedDate = date
-                                bookingState.selectedTimeSlot = nil
-                                fetchBookedSlots()
+                            DatePill(date: date, isSelected: isSelected, isAvailable: dateAvailable) {
+                                // Only allow selection if date is available
+                                if dateAvailable {
+                                    bookingState.selectedDate = date
+                                    bookingState.selectedTimeSlot = nil
+                                    fetchBookedSlots()
+                                }
                             }
                         }
                     }
                     .padding(.horizontal)
                 }
                 
-                // Morning slots
-                TimeSlotSection(
-                    title: "MORNING",
-                    subtitle: "(before 11:45 AM)",
-                    icon: "sun.max",
-                    slots: generateTimeSlots(start: 10, end: 12),
-                    bookedSlots: bookedSlots,
-                    selectedSlot: bookingState.selectedTimeSlot
-                ) { slot in
-                    bookingState.selectedTimeSlot = slot
-                }
-                
-                // Afternoon slots
-                TimeSlotSection(
-                    title: "AFTERNOON",
-                    subtitle: "(12:00 PM - 4:45 PM)",
-                    icon: "sun.min",
-                    slots: generateTimeSlots(start: 12, end: 17),
-                    bookedSlots: bookedSlots,
-                    selectedSlot: bookingState.selectedTimeSlot
-                ) { slot in
-                    bookingState.selectedTimeSlot = slot
-                }
-                
-                // Evening slots
-                TimeSlotSection(
-                    title: "EVENING",
-                    subtitle: "(After 5:00PM)",
-                    icon: "moon",
-                    slots: generateTimeSlots(start: 17, end: 19),
-                    bookedSlots: bookedSlots,
-                    selectedSlot: bookingState.selectedTimeSlot
-                ) { slot in
-                    bookingState.selectedTimeSlot = slot
+                // Check if artist is closed on selected day
+                if let avail = artistAvailability?.availability(for: bookingState.selectedDate), !avail.isOpen {
+                    // Artist is closed - show message instead of time slots
+                    VStack(spacing: 16) {
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(KHOIColors.mutedText)
+                        
+                        Text("\(artist.fullName) is not available on this day")
+                            .font(KHOITheme.body)
+                            .foregroundColor(KHOIColors.mutedText)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Please select another date")
+                            .font(KHOITheme.caption)
+                            .foregroundColor(KHOIColors.mutedText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    .padding(.horizontal)
+                } else {
+                    // Morning slots
+                    TimeSlotSection(
+                        title: "MORNING",
+                        subtitle: "(before 11:45 AM)",
+                        icon: "sun.max",
+                        slots: generateTimeSlots(start: 10, end: 12),
+                        bookedSlots: bookedSlots,
+                        selectedSlot: bookingState.selectedTimeSlot
+                    ) { slot in
+                        bookingState.selectedTimeSlot = slot
+                    }
+                    
+                    // Afternoon slots
+                    TimeSlotSection(
+                        title: "AFTERNOON",
+                        subtitle: "(12:00 PM - 4:45 PM)",
+                        icon: "sun.min",
+                        slots: generateTimeSlots(start: 12, end: 17),
+                        bookedSlots: bookedSlots,
+                        selectedSlot: bookingState.selectedTimeSlot
+                    ) { slot in
+                        bookingState.selectedTimeSlot = slot
+                    }
+                    
+                    // Evening slots
+                    TimeSlotSection(
+                        title: "EVENING",
+                        subtitle: "(After 5:00PM)",
+                        icon: "moon",
+                        slots: generateTimeSlots(start: 17, end: 19),
+                        bookedSlots: bookedSlots,
+                        selectedSlot: bookingState.selectedTimeSlot
+                    ) { slot in
+                        bookingState.selectedTimeSlot = slot
+                    }
                 }
                 
                 // Upload Inspo section header
@@ -1041,11 +1070,14 @@ struct TimeSlotSection: View {
             
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(slots) { slot in
+                    // Check BOTH booked status AND availability
                     let isBooked = bookedSlots.contains(slot.time)
+                    let isUnavailable = !slot.isAvailable || isBooked
                     let isSelected = selectedSlot?.time == slot.time
                     
                     Button(action: {
-                        if !isBooked {
+                        // Only allow selection if slot is available
+                        if !isUnavailable {
                             onSelect(slot)
                         }
                     }) {
@@ -1055,23 +1087,23 @@ struct TimeSlotSection: View {
                             .frame(maxWidth: .infinity)
                             .background(
                                 isSelected ? KHOIColors.darkText :
-                                isBooked ? Color.gray.opacity(0.1) : Color.clear
+                                isUnavailable ? Color.gray.opacity(0.1) : Color.clear
                             )
                             .foregroundColor(
                                 isSelected ? .white :
-                                isBooked ? Color.gray.opacity(0.4) : KHOIColors.darkText
+                                isUnavailable ? Color.gray.opacity(0.4) : KHOIColors.darkText
                             )
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(
                                         isSelected ? Color.clear :
-                                        isBooked ? Color.clear : Color.gray.opacity(0.2),
+                                        isUnavailable ? Color.clear : Color.gray.opacity(0.2),
                                         lineWidth: 1
                                     )
                             )
                     }
-                    .disabled(isBooked)
+                    .disabled(isUnavailable)
                 }
             }
             .padding(.horizontal)

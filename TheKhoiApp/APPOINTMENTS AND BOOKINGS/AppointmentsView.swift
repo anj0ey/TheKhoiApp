@@ -2,7 +2,6 @@
 //  AppointmentsView.swift
 //  TheKhoiApp
 //
-//  Appointments view for both clients and business pros
 //
 
 import SwiftUI
@@ -91,7 +90,10 @@ struct ClientAppointmentsView: View {
                                 .padding(.top, 60)
                         } else {
                             ForEach(appointments) { apt in
-                                ClientAppointmentCard(appointment: apt)
+                                NavigationLink(destination: AppointmentDetailView(appointment: apt, isProView: false)) {
+                                    ClientAppointmentCard(appointment: apt)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                     }
@@ -167,11 +169,14 @@ struct ProScheduleView: View {
                         .padding(.horizontal)
                 } else {
                     ForEach(appointmentsForSelectedDate) { apt in
-                        ProAppointmentCard(
-                            appointment: apt,
-                            onConfirm: { bookingService.updateAppointmentStatus(appointmentId: apt.id, status: .confirmed) { _ in } },
-                            onCancel: { bookingService.cancelAppointment(appointmentId: apt.id, reason: "Cancelled by pro") { _ in } }
-                        )
+                        NavigationLink(destination: AppointmentDetailView(appointment: apt, isProView: true)) {
+                            ProAppointmentCard(
+                                appointment: apt,
+                                onConfirm: { bookingService.updateAppointmentStatus(appointmentId: apt.id, status: .confirmed) { _ in } },
+                                onCancel: { bookingService.cancelAppointment(appointmentId: apt.id, reason: "Cancelled by pro") { _ in } }
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
                         .padding(.horizontal)
                     }
                 }
@@ -309,7 +314,29 @@ struct ClientAppointmentCard: View {
             }
             
             HStack {
+                // Show indicator if has inspo images or special requests
+                if !appointment.inspoImages.isEmpty || !appointment.specialRequests.isEmpty {
+                    HStack(spacing: 8) {
+                        if !appointment.inspoImages.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "photo")
+                                    .font(.system(size: 10))
+                                Text("\(appointment.inspoImages.count)")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundColor(KHOIColors.mutedText)
+                        }
+                        
+                        if !appointment.specialRequests.isEmpty {
+                            Image(systemName: "note.text")
+                                .font(.system(size: 10))
+                                .foregroundColor(KHOIColors.mutedText)
+                        }
+                    }
+                }
+                
                 Spacer()
+                
                 Text(appointment.formattedPrice)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(KHOIColors.accentBrown)
@@ -353,6 +380,17 @@ struct ProAppointmentCard: View {
                         Text("\(appointment.serviceDuration) min").font(.system(size: 11)).foregroundColor(KHOIColors.mutedText)
                         Text("•").foregroundColor(KHOIColors.mutedText)
                         Text(appointment.formattedPrice).font(.system(size: 11, weight: .semibold)).foregroundColor(KHOIColors.accentBrown)
+                        
+                        // Indicators for inspo/notes
+                        if !appointment.inspoImages.isEmpty || !appointment.specialRequests.isEmpty {
+                            Text("•").foregroundColor(KHOIColors.mutedText)
+                            if !appointment.inspoImages.isEmpty {
+                                Image(systemName: "photo").font(.system(size: 10)).foregroundColor(KHOIColors.mutedText)
+                            }
+                            if !appointment.specialRequests.isEmpty {
+                                Image(systemName: "note.text").font(.system(size: 10)).foregroundColor(KHOIColors.mutedText)
+                            }
+                        }
                     }
                 }
                 Spacer()

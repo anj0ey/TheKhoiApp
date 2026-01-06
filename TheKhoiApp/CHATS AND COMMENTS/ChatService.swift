@@ -44,9 +44,10 @@ class ChatService: ObservableObject {
     }
     
     /// Create a new conversation or return existing one
+    /// UPDATED: Now includes profileImageURL parameters
     func getOrCreateConversation(
-        currentUser: (uid: String, username: String, fullName: String),
-        otherUser: (uid: String, username: String, fullName: String),
+        currentUser: (uid: String, username: String, fullName: String, profileImageURL: String?),
+        otherUser: (uid: String, username: String, fullName: String, profileImageURL: String?),
         tag: ChatTag? = nil,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
@@ -63,25 +64,31 @@ class ChatService: ObservableObject {
                     return
                 }
                 
-                // Return existing conversation
+                // Return existing conversation (and update profile images if needed)
                 if let existingDoc = snapshot?.documents.first {
+                    // Update profile images in case they changed
+                    self.updateParticipantProfileImages(
+                        conversationId: existingDoc.documentID,
+                        currentUser: currentUser,
+                        otherUser: otherUser
+                    )
                     completion(.success(existingDoc.documentID))
                     return
                 }
                 
-                // Create new conversation
+                // Create new conversation with profile images
                 let participants: [String: ChatParticipant] = [
                     currentUser.uid: ChatParticipant(
                         odUid: currentUser.uid,
                         username: currentUser.username,
                         fullName: currentUser.fullName,
-                        profileImageURL: nil
+                        profileImageURL: currentUser.profileImageURL
                     ),
                     otherUser.uid: ChatParticipant(
                         odUid: otherUser.uid,
                         username: otherUser.username,
                         fullName: otherUser.fullName,
-                        profileImageURL: nil
+                        profileImageURL: otherUser.profileImageURL
                     )
                 ]
                 
@@ -104,6 +111,120 @@ class ChatService: ObservableObject {
                     } else {
                         completion(.success(docRef.documentID))
                     }
+                }
+            }
+    }
+    
+    /// LEGACY: Backward compatible version without profile images
+    /// This will fetch profile images from Firestore
+    func getOrCreateConversation(
+        currentUser: (uid: String, username: String, fullName: String),
+        otherUser: (uid: String, username: String, fullName: String),
+        tag: ChatTag? = nil,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        // Fetch profile images for both users first
+        fetchProfileImages(for: [currentUser.uid, otherUser.uid]) { [weak self] profileImages in
+            let currentUserWithImage = (
+                uid: currentUser.uid,
+                username: currentUser.username,
+                fullName: currentUser.fullName,
+                profileImageURL: profileImages[currentUser.uid]
+            )
+            
+            let otherUserWithImage = (
+                uid: otherUser.uid,
+                username: otherUser.username,
+                fullName: otherUser.fullName,
+                profileImageURL: profileImages[otherUser.uid]
+            )
+            
+            self?.getOrCreateConversation(
+                currentUser: currentUserWithImage as! (uid: String, username: String, fullName: String, profileImageURL: String?),
+                otherUser: otherUserWithImage as! (uid: String, username: String, fullName: String, profileImageURL: String?),
+                tag: tag,
+                completion: completion
+            )
+        }
+    }
+    
+    /// Fetch profile images for multiple users
+    private func fetchProfileImages(for userIds: [String], completion: @escaping ([String: String?]) -> Void) {
+        var profileImages: [String: String?] = [:]
+        let group = DispatchGroup()
+        
+        for userId in userIds {
+            group.enter()
+            
+            // Try users collection first
+            db.collection("users").document(userId).getDocument { [weak self] snapshot, error in
+                guard let self = self else {
+                    group.leave()
+                    return
+                }
+                
+                if let data = snapshot?.data(),
+                   let imageURL = data["profileImageURL"] as? String,
+                   !imageURL.isEmpty {
+                    profileImages[userId] = imageURL
+                    group.leave()
+                } else {
+                    // Try artists collection as fallback
+                    self.db.collection("artists").document(userId).getDocument { artistSnapshot, _ in
+                        if let artistData = artistSnapshot?.data(),
+                           let imageURL = artistData["profileImageURL"] as? String,
+                           !imageURL.isEmpty {
+                            profileImages[userId] = imageURL
+                        } else {
+                            profileImages[userId] = nil
+                        }
+                        group.leave()
+                    }
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            completion(profileImages)
+        }
+    }
+    
+    /// Update profile images for existing conversation participants
+    private func updateParticipantProfileImages(
+        conversationId: String,
+        currentUser: (uid: String, username: String, fullName: String, profileImageURL: String?),
+        otherUser: (uid: String, username: String, fullName: String, profileImageURL: String?)
+    ) {
+        var updateData: [String: Any] = [:]
+        
+        if let imageURL = currentUser.profileImageURL, !imageURL.isEmpty {
+            updateData["participants.\(currentUser.uid).profileImageURL"] = imageURL
+        }
+        
+        if let imageURL = otherUser.profileImageURL, !imageURL.isEmpty {
+            updateData["participants.\(otherUser.uid).profileImageURL"] = imageURL
+        }
+        
+        if !updateData.isEmpty {
+            db.collection("conversations").document(conversationId).updateData(updateData) { error in
+                if let error = error {
+                    print("Error updating participant profile images: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    /// Update a single participant's profile image in all their conversations
+    func updateUserProfileImageInConversations(userId: String, newImageURL: String) {
+        db.collection("conversations")
+            .whereField("participantIds", arrayContains: userId)
+            .getDocuments { [weak self] snapshot, error in
+                guard let documents = snapshot?.documents else { return }
+                
+                for doc in documents {
+                    self?.db.collection("conversations").document(doc.documentID).updateData([
+                        "participants.\(userId).profileImageURL": newImageURL
+                    ])
                 }
             }
     }
@@ -141,7 +262,6 @@ class ChatService: ObservableObject {
         otherUserId: String,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
-        //notification test log
         print("ChatService.sendMessage called")
         print("otherUserId: \(otherUserId)")
         
@@ -196,7 +316,6 @@ class ChatService: ObservableObject {
         messagePreview: String,
         conversationId: String
     ) {
-        //notification test log
         print("sendMessageNotification called for: \(recipientId)")
         
         NotificationService.shared.sendNewMessageNotification(
@@ -236,6 +355,54 @@ class ChatService: ObservableObject {
                 
                 completion(totalUnread)
             }
+    }
+    
+    // MARK: - Fix Existing Conversations (One-time migration)
+    
+    /// Call this once to fix profile images in existing conversations
+    func migrateExistingConversationsWithProfileImages(completion: @escaping (Int) -> Void) {
+        db.collection("conversations").getDocuments { [weak self] snapshot, error in
+            guard let self = self, let documents = snapshot?.documents else {
+                completion(0)
+                return
+            }
+            
+            var updatedCount = 0
+            let group = DispatchGroup()
+            
+            for doc in documents {
+                let data = doc.data()
+                guard let participantIds = data["participantIds"] as? [String] else { continue }
+                
+                group.enter()
+                
+                self.fetchProfileImages(for: participantIds) { profileImages in
+                    var updateData: [String: Any] = [:]
+                    
+                    for (userId, imageURL) in profileImages {
+                        if let url = imageURL, !url.isEmpty {
+                            updateData["participants.\(userId).profileImageURL"] = url
+                        }
+                    }
+                    
+                    if !updateData.isEmpty {
+                        self.db.collection("conversations").document(doc.documentID).updateData(updateData) { error in
+                            if error == nil {
+                                updatedCount += 1
+                            }
+                            group.leave()
+                        }
+                    } else {
+                        group.leave()
+                    }
+                }
+            }
+            
+            group.notify(queue: .main) {
+                print("Migration complete. Updated \(updatedCount) conversations.")
+                completion(updatedCount)
+            }
+        }
     }
     
     // MARK: - Cleanup

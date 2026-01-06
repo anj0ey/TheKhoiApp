@@ -58,6 +58,9 @@ final class AuthManager: ObservableObject {
     @Published var needsProfileSetup: Bool = false
     @Published var isCheckingAuth: Bool = true
     @Published var showOnboarding: Bool = false  // Controls when to show OnboardingView
+    var isVerifiedPro: Bool {
+        return hasBusinessProfile
+    }
     
     // Computed property to check if user is logged in
     var isLoggedIn: Bool {

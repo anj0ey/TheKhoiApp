@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
 
 // MARK: - Chat Filter Category
 enum ChatFilterCategory: String, CaseIterable {
@@ -207,10 +208,15 @@ struct ChatFilterChip: View {
     }
 }
 
-// MARK: - Chat Row View
+// MARK: - Chat Row View (UPDATED with real-time profile image fetching)
 struct ChatRowView: View {
     let conversation: Conversation
     let currentUserId: String
+    
+    @State private var fetchedProfileImageURL: String? = nil
+    @State private var hasFetchedImage = false
+    
+    private let db = Firestore.firestore()
     
     var otherParticipant: ChatParticipant? {
         conversation.otherParticipant(currentUserId: currentUserId)
@@ -220,24 +226,42 @@ struct ChatRowView: View {
         conversation.unreadCountForUser(currentUserId)
     }
     
+    // Use fetched URL if available, otherwise use conversation's stored URL
+    var profileImageURL: String? {
+        if let fetched = fetchedProfileImageURL, !fetched.isEmpty {
+            return fetched
+        }
+        if let stored = otherParticipant?.profileImageURL, !stored.isEmpty {
+            return stored
+        }
+        return nil
+    }
+    
     var body: some View {
         HStack(spacing: KHOITheme.spacing_md) {
             // Avatar with unread badge
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: otherParticipant?.profileImageURL ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle()
-                        .fill(KHOIColors.cardBackground)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .foregroundColor(KHOIColors.mutedText)
-                        )
+                if let imageURL = profileImageURL, let url = URL(string: imageURL) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure(_):
+                            placeholderAvatar
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 56, height: 56)
+                        @unknown default:
+                            placeholderAvatar
+                        }
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+                } else {
+                    placeholderAvatar
                 }
-                .frame(width: 56, height: 56)
-                .clipShape(Circle())
                 
                 // Unread badge
                 if unreadCount > 0 {
@@ -283,6 +307,64 @@ struct ChatRowView: View {
         }
         .padding(.horizontal, KHOITheme.spacing_lg)
         .padding(.vertical, KHOITheme.spacing_md)
+        .onAppear {
+            // Fetch profile image if not stored in conversation
+            if !hasFetchedImage && (otherParticipant?.profileImageURL == nil || otherParticipant?.profileImageURL?.isEmpty == true) {
+                fetchProfileImage()
+            }
+        }
+    }
+    
+    private var placeholderAvatar: some View {
+        Circle()
+            .fill(KHOIColors.cardBackground)
+            .frame(width: 56, height: 56)
+            .overlay(
+                Image(systemName: "person.fill")
+                    .foregroundColor(KHOIColors.mutedText)
+            )
+    }
+    
+    private func fetchProfileImage() {
+        guard let odUid = otherParticipant?.odUid else { return }
+        hasFetchedImage = true
+        
+        // Try users collection first
+        db.collection("users").document(odUid).getDocument { snapshot, error in
+            if let data = snapshot?.data(),
+               let imageURL = data["profileImageURL"] as? String,
+               !imageURL.isEmpty {
+                DispatchQueue.main.async {
+                    self.fetchedProfileImageURL = imageURL
+                }
+                // Also update the conversation document for future loads
+                self.updateConversationProfileImage(userId: odUid, imageURL: imageURL)
+            } else {
+                // Try artists collection
+                self.db.collection("artists").document(odUid).getDocument { artistSnapshot, _ in
+                    if let artistData = artistSnapshot?.data(),
+                       let imageURL = artistData["profileImageURL"] as? String,
+                       !imageURL.isEmpty {
+                        DispatchQueue.main.async {
+                            self.fetchedProfileImageURL = imageURL
+                        }
+                        self.updateConversationProfileImage(userId: odUid, imageURL: imageURL)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func updateConversationProfileImage(userId: String, imageURL: String) {
+        db.collection("conversations").document(conversation.id).updateData([
+            "participants.\(userId).profileImageURL": imageURL
+        ]) { error in
+            if let error = error {
+                print("Error updating conversation profile image: \(error.localizedDescription)")
+            } else {
+                print("Updated conversation \(conversation.id) with profile image for user \(userId)")
+            }
+        }
     }
 }
 

@@ -28,27 +28,31 @@ struct DiscoverView: View {
                 KHOIColors.background
                     .ignoresSafeArea()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
-                        // 1. Search Bar
-                        searchBarSection
-                        
-                        // Show search results OR normal feed
-                        if !searchText.isEmpty {
+                VStack(alignment: .leading, spacing: KHOITheme.spacing_md) {
+                    // 1. Search Bar (always pinned)
+                    searchBarSection
+
+                    if !searchText.isEmpty {
+                        // 2. Search results scroll under the pinned search bar
+                        ScrollView(showsIndicators: false) {
                             searchResultsSection
-                        } else {
-                            // 2. Category Filter Pills
-                            categoryPillsSection
-                            
-                            // 3. DISCOVER Header + Toggle
-                            discoverHeaderSection
-                            
-                            // 4. MASONRY GRID
+                                .padding(.top, KHOITheme.spacing_sm)
+                        }
+                    } else {
+                        // 2. Category Filter Pills (pinned)
+                        categoryPillsSection
+
+                        // 3. DISCOVER Header + Toggle (pinned)
+                        discoverHeaderSection
+
+                        // 4. Masonry feed scrolls independently
+                        ScrollView(showsIndicators: false) {
                             masonryFeedSection
+                                .padding(.top, KHOITheme.spacing_sm)
                         }
                     }
-                    .padding(.top, KHOITheme.spacing_sm)
                 }
+                .padding(.top, KHOITheme.spacing_sm)
             }
             .onAppear {
                 feedService.fetchPosts(category: selectedCategory == "All" ? nil : selectedCategory)
