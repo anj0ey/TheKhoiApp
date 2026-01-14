@@ -13,82 +13,68 @@ struct NotificationPermissionView: View {
     var onComplete: ((Bool) -> Void)?
     
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            // Icon
+        GeometryReader { geo in
             ZStack {
-                Circle()
-                    .fill(KHOIColors.accentBrown.opacity(0.1))
-                    .frame(width: 100, height: 100)
-                
-                Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 44))
-                    .foregroundColor(KHOIColors.accentBrown)
-            }
-            
-            // Title and description
-            VStack(spacing: 12) {
-                Text("Stay in the Loop")
-                    .font(KHOITheme.title)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text("Enable notifications to get reminders about your upcoming appointments and important updates.")
-                    .font(KHOITheme.body)
-                    .foregroundColor(KHOIColors.mutedText)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-            }
-            
-            // Benefits list
-            VStack(alignment: .leading, spacing: 16) {
-                NotificationBenefitRow(
-                    icon: "calendar.badge.clock",
-                    title: "Appointment Reminders",
-                    description: "Get notified before your appointments"
-                )
-                
-                NotificationBenefitRow(
-                    icon: "checkmark.circle",
-                    title: "Booking Updates",
-                    description: "Know when your booking is confirmed"
-                )
-                
-                NotificationBenefitRow(
-                    icon: "star.fill",
-                    title: "Pro Status Updates",
-                    description: "Track your pro application status"
-                )
-            }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 24)
-            
-            Spacer()
-            
-            // Buttons
-            VStack(spacing: 12) {
-                Button(action: enableNotifications) {
-                    Text("Enable Notifications")
-                        .font(KHOITheme.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(KHOIColors.accentBrown)
-                        .cornerRadius(12)
-                }
-                
-                Button(action: skipNotifications) {
-                    Text("Maybe Later")
-                        .font(KHOITheme.body)
-                        .foregroundColor(KHOIColors.mutedText)
-                        .padding(.vertical, 12)
+                Color(hex:"FEFCF6")
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    Image("enable notifications")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width,
+                               height: geo.size.height * 0.62)
+                        .clipped()
+                        .scaleEffect(2.2)
+                        //.offset(y: 22)
+                        .ignoresSafeArea(edges: .top)
+                   
+                    Spacer(minLength: geo.size.height * 0.05)  // 5% of screen height
+
+                    VStack(spacing: 10) {
+                        Text("Your glow-up doesn’t clock out.")
+                            .font(KHOITheme.title.bold())
+                            .foregroundColor(Color(red: 0.2, green: 0.15, blue: 0.15))
+                            .multilineTextAlignment(.center)
+
+                        Text("Never miss your booking reminders\nand messages.")
+                            .font(KHOITheme.headline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, geo.size.height * 0.05)  // 10% of screen height
+                    .padding(.horizontal, 32)
+
+                    // Buttons (bring up)
+                    VStack(spacing: 10) {
+                        Button(action: enableNotifications) {
+                            Text("Turn on notifications")
+                                .font(KHOITheme.headline.bold())
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(KHOIColors.accentBrown)
+                                .cornerRadius(12)
+                        }
+
+                        Button(action: skipNotifications) {
+                            Text("Another time")
+                                .font(KHOITheme.headline)
+                                .foregroundColor(.gray)
+                                .padding(.vertical, 10)
+                        }
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 18)
+                    .padding(.bottom, geo.safeAreaInsets.bottom + 14)
+
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
         }
-        .background(KHOIColors.background.ignoresSafeArea())
     }
+    
+    // MARK: - Actions
     
     private func enableNotifications() {
         notificationService.requestPermission { granted in
@@ -103,32 +89,6 @@ struct NotificationPermissionView: View {
         UserDefaults.standard.set(Date(), forKey: "notificationPermissionSkippedDate")
         onComplete?(false)
         isPresented = false
-    }
-}
-
-// MARK: - Benefit Row
-struct NotificationBenefitRow: View {
-    let icon: String
-    let title: String
-    let description: String
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(KHOIColors.accentBrown)
-                .frame(width: 32)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(KHOITheme.bodyBold)
-                    .foregroundColor(KHOIColors.darkText)
-                
-                Text(description)
-                    .font(KHOITheme.caption)
-                    .foregroundColor(KHOIColors.mutedText)
-            }
-        }
     }
 }
 
