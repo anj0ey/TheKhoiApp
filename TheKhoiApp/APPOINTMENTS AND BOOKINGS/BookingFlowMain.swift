@@ -10,6 +10,13 @@ import PhotosUI
 import FirebaseStorage
 import FirebaseFirestore
 
+struct BookedSlotInfo {
+    let timeSlot: String
+    let duration: Int  // in minutes
+    let startMinutes: Int  // minutes since midnight
+    let endMinutes: Int    // minutes since midnight
+}
+
 struct BookingFlowView: View {
     let artist: Artist
     @Binding var isPresented: Bool
@@ -21,7 +28,8 @@ struct BookingFlowView: View {
     @State private var currentStep = 1
     @State private var showConfirmation = false
     @State private var isSubmitting = false
-    @State private var bookedSlots: [String] = []
+    @State private var bookedSlots: [String] = []  // NOTE: Redundant - can be removed, using bookedSlotsWithDuration instead
+    @State private var bookedSlotsWithDuration: [BookedSlotInfo] = []
     
     @State private var artistAvailability: BusinessAvailability? = nil
     
@@ -343,7 +351,8 @@ struct BookingFlowView: View {
                         subtitle: "(before 11:45 AM)",
                         icon: "sun.max",
                         slots: generateTimeSlots(start: 10, end: 12),
-                        bookedSlots: bookedSlots,
+                        bookedSlotsWithDuration: bookedSlotsWithDuration,
+                        serviceDuration: bookingState.selectedService?.duration ?? 60,
                         selectedSlot: bookingState.selectedTimeSlot
                     ) { slot in
                         bookingState.selectedTimeSlot = slot
@@ -355,7 +364,8 @@ struct BookingFlowView: View {
                         subtitle: "(12:00 PM - 4:45 PM)",
                         icon: "sun.min",
                         slots: generateTimeSlots(start: 12, end: 17),
-                        bookedSlots: bookedSlots,
+                        bookedSlotsWithDuration: bookedSlotsWithDuration,
+                        serviceDuration: bookingState.selectedService?.duration ?? 60,
                         selectedSlot: bookingState.selectedTimeSlot
                     ) { slot in
                         bookingState.selectedTimeSlot = slot
@@ -367,7 +377,8 @@ struct BookingFlowView: View {
                         subtitle: "(After 5:00PM)",
                         icon: "moon",
                         slots: generateTimeSlots(start: 17, end: 19),
-                        bookedSlots: bookedSlots,
+                        bookedSlotsWithDuration: bookedSlotsWithDuration,
+                        serviceDuration: bookingState.selectedService?.duration ?? 60,
                         selectedSlot: bookingState.selectedTimeSlot
                     ) { slot in
                         bookingState.selectedTimeSlot = slot
@@ -686,9 +697,27 @@ struct BookingFlowView: View {
         return result
     }
     
+
     private func fetchBookedSlots() {
-        bookingService.getBookedSlots(artistId: artist.id, date: bookingState.selectedDate) { slots in
-            self.bookedSlots = slots
+        print("DEBUG: Fetching booked slots for date: \(bookingState.selectedDate)")
+        print("DEBUG: Artist ID: \(artist.id)")
+        print("DEBUG: Artist Name: \(artist.fullName)")
+        
+        // 🔍 TEST: Check if ANY appointments exist for this artist
+        bookingService.testQueryAllAppointments(artistId: artist.id)
+        
+        bookingService.getBookedSlotsWithDuration(artistId: artist.id, date: bookingState.selectedDate) { slotsInfo in
+            // ✅ CRITICAL: Dispatch to main thread for UI updates
+            DispatchQueue.main.async {
+                print("DEBUG: Received \(slotsInfo.count) booked slots")
+                for slot in slotsInfo {
+                    print("DEBUG: Booked - \(slot.timeSlot), Duration: \(slot.duration)min, Start: \(slot.startMinutes), End: \(slot.endMinutes)")
+                }
+                self.bookedSlotsWithDuration = slotsInfo
+                self.bookedSlots = slotsInfo.map { $0.timeSlot }
+                print("DEBUG: bookedSlots array: \(self.bookedSlots)")
+                print("DEBUG: bookedSlotsWithDuration count: \(self.bookedSlotsWithDuration.count)")
+            }
         }
     }
     
@@ -725,6 +754,9 @@ struct BookingFlowView: View {
         // Get availability for selected date
         let dayAvailability = artistAvailability?.availability(for: bookingState.selectedDate)
         
+        // Get the duration of the selected service
+        let serviceDuration = bookingState.selectedService?.duration ?? 60
+        
         for hour in start..<end {
             for minute in [0, 15, 30, 45] {
                 var components = DateComponents()
@@ -743,15 +775,21 @@ struct BookingFlowView: View {
                             let slotMinutes = hour * 60 + minute
                             let startMinutes = avail.startHour * 60 + avail.startMinute
                             let endMinutes = avail.endHour * 60 + avail.endMinute
-                            isWithinAvailability = slotMinutes >= startMinutes && slotMinutes < endMinutes
+                            
+                            // Check if slot + service duration fits within availability
+                            let slotEndMinutes = slotMinutes + serviceDuration
+                            isWithinAvailability = slotMinutes >= startMinutes && slotEndMinutes <= endMinutes
                         }
                     }
+                    
+                    // Check if this slot conflicts with existing bookings (considering duration)
+                    let isBlocked = isSlotBlockedByDuration(hour: hour, minute: minute, serviceDuration: serviceDuration)
                     
                     slots.append(TimeSlot(
                         time: timeString,
                         hour: hour,
                         minute: minute,
-                        isAvailable: !bookedSlots.contains(timeString) && isWithinAvailability
+                        isAvailable: !isBlocked && isWithinAvailability
                     ))
                 }
             }
@@ -759,6 +797,38 @@ struct BookingFlowView: View {
         return slots
     }
 
+    // MARK: - Check if Slot is Blocked Considering Duration
+    private func isSlotBlockedByDuration(hour: Int, minute: Int, serviceDuration: Int) -> Bool {
+        // Convert current slot to minutes since midnight
+        let currentSlotStart = hour * 60 + minute
+        let currentSlotEnd = currentSlotStart + serviceDuration
+        
+        // Check each booked slot to see if there's a conflict
+        for bookedSlot in bookedSlotsWithDuration {
+            // Check for time overlap:
+            // 1. Current slot starts during booked appointment
+            if currentSlotStart >= bookedSlot.startMinutes && currentSlotStart < bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 2. Current slot ends during booked appointment
+            if currentSlotEnd > bookedSlot.startMinutes && currentSlotEnd <= bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 3. Current slot completely contains booked appointment
+            if currentSlotStart <= bookedSlot.startMinutes && currentSlotEnd >= bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 4. Booked appointment completely contains current slot
+            if bookedSlot.startMinutes <= currentSlotStart && bookedSlot.endMinutes >= currentSlotEnd {
+                return true
+            }
+        }
+        
+        return false
+    }
     
     private func submitBooking() {
         guard let service = bookingState.selectedService,
@@ -1046,7 +1116,8 @@ struct TimeSlotSection: View {
     let subtitle: String
     let icon: String
     let slots: [TimeSlot]
-    let bookedSlots: [String]
+    let bookedSlotsWithDuration: [BookedSlotInfo]  // ✅ Changed from [String]
+    let serviceDuration: Int  // ✅ Added service duration
     let selectedSlot: TimeSlot?
     let onSelect: (TimeSlot) -> Void
     
@@ -1070,9 +1141,9 @@ struct TimeSlotSection: View {
             
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(slots) { slot in
-                    // Check BOTH booked status AND availability
-                    let isBooked = bookedSlots.contains(slot.time)
-                    let isUnavailable = !slot.isAvailable || isBooked
+                    // ✅ Use duration-based blocking logic
+                    let isBlocked = isSlotBlockedByDuration(slot: slot)
+                    let isUnavailable = !slot.isAvailable || isBlocked
                     let isSelected = selectedSlot?.time == slot.time
                     
                     Button(action: {
@@ -1108,6 +1179,37 @@ struct TimeSlotSection: View {
             }
             .padding(.horizontal)
         }
+    }
+    
+    // ✅ Helper function to check if slot is blocked by duration
+    private func isSlotBlockedByDuration(slot: TimeSlot) -> Bool {
+        let currentSlotStart = slot.hour * 60 + slot.minute
+        let currentSlotEnd = currentSlotStart + serviceDuration
+        
+        for bookedSlot in bookedSlotsWithDuration {
+            // Check for time overlap:
+            // 1. Current slot starts during booked appointment
+            if currentSlotStart >= bookedSlot.startMinutes && currentSlotStart < bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 2. Current slot ends during booked appointment
+            if currentSlotEnd > bookedSlot.startMinutes && currentSlotEnd <= bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 3. Current slot completely contains booked appointment
+            if currentSlotStart <= bookedSlot.startMinutes && currentSlotEnd >= bookedSlot.endMinutes {
+                return true
+            }
+            
+            // 4. Booked appointment completely contains current slot
+            if bookedSlot.startMinutes <= currentSlotStart && bookedSlot.endMinutes >= currentSlotEnd {
+                return true
+            }
+        }
+        
+        return false
     }
 }
 
@@ -1320,4 +1422,3 @@ struct CheckboxToggleStyle: ToggleStyle {
         }
     }
 }
-

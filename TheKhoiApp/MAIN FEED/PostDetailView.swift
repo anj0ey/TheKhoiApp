@@ -51,9 +51,13 @@ struct PostDetailView: View {
                         // Save count
                         saveCountRow
                         
+                        // Caption section (NEW)
+                        captionSection
+                        
                         // Comments section
                         commentsSection
                     }
+                    .padding(.top, 8)
                     .padding(.bottom, 100)
                 }
                 
@@ -85,15 +89,6 @@ struct PostDetailView: View {
                 .tracking(2)
             
             Spacer()
-            
-            /*
-            // Message button
-            NavigationLink(destination: ArtistProfileLoader(artistId: post.artistId)) {
-                Image(systemName: "bubble.right")
-                    .font(.system(size: 18))
-                    .foregroundColor(KHOIColors.darkText)
-            }
-            */
         }
         .padding()
         .background(KHOIColors.background)
@@ -226,6 +221,44 @@ struct PostDetailView: View {
             Spacer()
         }
         .padding(.horizontal)
+    }
+    
+    // MARK: - Caption Section
+    
+    private var captionSection: some View {
+        Group {
+            if !post.caption!.isEmpty {
+                HStack(alignment: .top, spacing: 12) {
+                    // Artist avatar
+                    AsyncImage(url: URL(string: post.artistProfileImageURL ?? "")) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                    }
+                    .frame(width: 32, height: 32)
+                    .clipShape(Circle())
+                    
+                    // Caption text
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(post.artistName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(KHOIColors.darkText)
+                        
+                        Text(post.caption!)
+                            .font(.system(size: 14))
+                            .foregroundColor(KHOIColors.darkText)
+                            .lineSpacing(2)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        }
     }
     
     // MARK: - Comments Section
@@ -470,142 +503,11 @@ struct CommentRow: View {
                 if let data = data, let uiImage = UIImage(data: data) {
                     self.loadedImage = uiImage
                 } else {
-                    print("❌ Failed to load image: \(error?.localizedDescription ?? "Unknown error")")
+                    print("Failed to load image: \(error?.localizedDescription ?? "Unknown error")")
                     self.loadFailed = true
                 }
                 self.isLoading = false
             }
         }.resume()
-    }
-}
-
-// MARK: - Tappable Post Card for Discovery
-
-struct TappablePostCard: View {
-    let post: Post
-    let isSaved: Bool
-    let onSaveTap: () -> Void
-    
-    var body: some View {
-        NavigationLink(destination: PostDetailView(post: post)) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Artist info row
-                HStack(spacing: 8) {
-                    if let profileURL = post.artistProfileImageURL, let url = URL(string: profileURL) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Circle().fill(KHOIColors.chipBackground)
-                        }
-                        .frame(width: 24, height: 24)
-                        .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(KHOIColors.chipBackground)
-                            .frame(width: 24, height: 24)
-                    }
-                    
-                    Text(post.artistHandle.replacingOccurrences(of: "@", with: ""))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(KHOIColors.darkText)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    TagBadge(tag: post.tag)
-                }
-                .padding(.bottom, 8)
-                
-                // Post image
-                AsyncImage(url: URL(string: post.imageURL)) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                            .aspectRatio(0.8, contentMode: .fit)
-                            .overlay(ProgressView())
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    case .failure:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                            .aspectRatio(0.8, contentMode: .fit)
-                    @unknown default:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                    }
-                }
-                .cornerRadius(12)
-                
-                // Save button row
-                HStack(spacing: 6) {
-                    Button(action: onSaveTap) {
-                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 14))
-                            .foregroundColor(isSaved ? KHOIColors.accentBrown : KHOIColors.darkText)
-                    }
-                    
-                    Text(formatSaveCount(post.saveCount))
-                        .font(.system(size: 11))
-                        .foregroundColor(KHOIColors.mutedText)
-                }
-                .padding(.top, 8)
-            }
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private func formatSaveCount(_ count: Int) -> String {
-        if count >= 1000 {
-            return String(format: "%.1fk", Double(count) / 1000.0)
-        }
-        return "\(count)"
-    }
-}
-
-// MARK: - Tappable Grid Post Tile
-
-struct TappableGridPostTile: View {
-    let post: Post
-    
-    var body: some View {
-        NavigationLink(destination: PostDetailView(post: post)) {
-            GeometryReader { geometry in
-                AsyncImage(url: URL(string: post.imageURL)) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                            .overlay(
-                                ProgressView()
-                                    .tint(KHOIColors.mutedText)
-                            )
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geometry.size.width, height: geometry.size.width)
-                            .clipped()
-                    case .failure:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(KHOIColors.mutedText)
-                                    .font(.system(size: 24))
-                            )
-                    @unknown default:
-                        Rectangle()
-                            .fill(KHOIColors.chipBackground)
-                    }
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 }

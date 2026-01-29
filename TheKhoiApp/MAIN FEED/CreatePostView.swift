@@ -2,6 +2,7 @@
 //  CreatePostView.swift
 //  TheKhoiApp
 //
+//  Updated: Tag/Category selection is now REQUIRED for posting
 //
 
 import SwiftUI
@@ -23,7 +24,7 @@ struct CreatePostView: View {
     
     // Form values
     @State private var caption: String = ""
-    @State private var selectedCategory: String? = nil
+    @State private var selectedCategory: String? = nil  // nil = no category selected
     @State private var location: String = ""
     
     private let categories = ["Hair", "Nails", "Makeup", "Brows", "Skin", "Body", "Lash"]
@@ -78,7 +79,7 @@ struct CreatePostView: View {
                                 RoundedRectangle(cornerRadius: KHOITheme.radius_lg)
                                     .fill(KHOIColors.cardBackground)
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 400) // INCREASED from 253
+                                    .frame(height: 400)
                                 
                                 if let image = selectedImage {
                                     Image(uiImage: image)
@@ -90,7 +91,7 @@ struct CreatePostView: View {
                                 } else {
                                     VStack(spacing: KHOITheme.spacing_sm) {
                                         Image(systemName: "photo.on.rectangle.angled")
-                                            .font(.system(size: 48)) // Larger icon
+                                            .font(.system(size: 48))
                                             .foregroundColor(KHOIColors.mutedText)
                                         Text("Tap to add a photo")
                                             .font(KHOITheme.body)
@@ -102,11 +103,26 @@ struct CreatePostView: View {
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // MARK: - Category chips (MOVED UP - before caption)
+                    // MARK: - Category chips (REQUIRED - shows indicator)
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
-                        Text("Beauty Service")
-                            .font(KHOITheme.captionUppercase)
-                            .foregroundColor(KHOIColors.mutedText)
+                        HStack(spacing: 4) {
+                            Text("Beauty Service")
+                                .font(KHOITheme.captionUppercase)
+                                .foregroundColor(KHOIColors.mutedText)
+                            
+                            // Required indicator
+                            Text("*")
+                                .font(KHOITheme.captionUppercase)
+                                .foregroundColor(KHOIColors.brandRed)
+                        }
+                        
+                        // Show error message if trying to share without category
+                        if selectedImage != nil && !caption.isEmpty && selectedCategory == nil {
+                            Text("Please select a beauty service category")
+                                .font(.system(size: 12))
+                                .foregroundColor(KHOIColors.brandRed)
+                                .padding(.bottom, 4)
+                        }
                         
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: KHOITheme.spacing_sm) {
@@ -133,6 +149,15 @@ struct CreatePostView: View {
                                                 : KHOIColors.darkText
                                             )
                                             .cornerRadius(999)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 999)
+                                                    .stroke(
+                                                        selectedCategory == category
+                                                        ? KHOIColors.accent
+                                                        : Color.clear,
+                                                        lineWidth: 1.5
+                                                    )
+                                            )
                                     }
                                 }
                             }
@@ -141,7 +166,7 @@ struct CreatePostView: View {
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // MARK: - Caption (NOW BELOW beauty service)
+                    // MARK: - Caption
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Caption")
                             .font(KHOITheme.captionUppercase)
@@ -170,7 +195,7 @@ struct CreatePostView: View {
                     }
                     .padding(.horizontal, KHOITheme.spacing_md)
                     
-                    // MARK: - Location (NEW)
+                    // MARK: - Location
                     VStack(alignment: .leading, spacing: KHOITheme.spacing_xs) {
                         Text("Location")
                             .font(KHOITheme.captionUppercase)
@@ -224,7 +249,10 @@ struct CreatePostView: View {
     // MARK: - Derived state
     
     private var canShare: Bool {
-        selectedImage != nil && !caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // NOW REQUIRES: image, caption, AND category
+        return selectedImage != nil
+            && !caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedCategory != nil
     }
     
     // MARK: - Actions
@@ -232,7 +260,8 @@ struct CreatePostView: View {
     private func sharePost() {
         guard let image = selectedImage,
               let user = authManager.currentUser,
-              let uid = authManager.firebaseUID else { return }
+              let uid = authManager.firebaseUID,
+              let category = selectedCategory else { return }  // Ensure category exists
         
         isUploading = true
         let path = "post_images/\(UUID().uuidString).jpg"
@@ -242,7 +271,7 @@ struct CreatePostView: View {
             switch result {
             case .success(let url):
                 
-                // 2. Create Post with location
+                // 2. Create Post with category
                 let newPost = Post(
                     id: UUID().uuidString,
                     artistId: uid,
@@ -251,7 +280,7 @@ struct CreatePostView: View {
                     artistProfileImageURL: user.profileImageURL,
                     imageURL: url,
                     imageHeight: 350,
-                    tag: selectedCategory ?? "General",
+                    tag: category,  // Use selected category
                     caption: caption,
                     saveCount: 0,
                     createdAt: Date()
