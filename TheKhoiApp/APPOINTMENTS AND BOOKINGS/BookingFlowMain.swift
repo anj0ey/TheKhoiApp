@@ -324,15 +324,19 @@ struct BookingFlowView: View {
                     .padding(.horizontal)
                 }
                 
-                // Check if artist is closed on selected day
-                if let avail = artistAvailability?.availability(for: bookingState.selectedDate), !avail.isOpen {
+                // Check if artist is closed on selected day (including vacation)
+                if let avail = artistAvailability, !avail.availability(for: bookingState.selectedDate).isOpen {
                     // Artist is closed - show message instead of time slots
+                    let isVacation = avail.isVacationDay(bookingState.selectedDate)
+                    
                     VStack(spacing: 16) {
-                        Image(systemName: "moon.zzz.fill")
+                        Image(systemName: isVacation ? "airplane" : "moon.zzz.fill")
                             .font(.system(size: 40))
                             .foregroundColor(KHOIColors.mutedText)
                         
-                        Text("\(artist.fullName) is not available on this day")
+                        Text(isVacation
+                            ? "\(artist.fullName) is on vacation this day"
+                            : "\(artist.fullName) is not available on this day")
                             .font(KHOITheme.body)
                             .foregroundColor(KHOIColors.mutedText)
                             .multilineTextAlignment(.center)
@@ -723,6 +727,13 @@ struct BookingFlowView: View {
     
     private func isDateAvailable(_ date: Date) -> Bool {
         guard let availability = artistAvailability else { return true }
+        
+        // Check if it's a vacation day
+        if availability.isVacationDay(date) {
+            return false
+        }
+        
+        // Check regular availability
         return availability.availability(for: date).isOpen
     }
     
@@ -797,32 +808,38 @@ struct BookingFlowView: View {
         return slots
     }
 
-    // MARK: - Check if Slot is Blocked Considering Duration
     private func isSlotBlockedByDuration(hour: Int, minute: Int, serviceDuration: Int) -> Bool {
         // Convert current slot to minutes since midnight
         let currentSlotStart = hour * 60 + minute
         let currentSlotEnd = currentSlotStart + serviceDuration
         
+        // Get buffer time from artist availability
+        let buffer = artistAvailability?.bufferMinutes ?? 0
+        
         // Check each booked slot to see if there's a conflict
         for bookedSlot in bookedSlotsWithDuration {
+            // Calculate the blocked range INCLUDING buffer time after the appointment
+            let blockedStart = bookedSlot.startMinutes
+            let blockedEnd = bookedSlot.endMinutes + buffer  // Add buffer after appointment ends
+            
             // Check for time overlap:
-            // 1. Current slot starts during booked appointment
-            if currentSlotStart >= bookedSlot.startMinutes && currentSlotStart < bookedSlot.endMinutes {
+            // 1. Current slot starts during blocked period (appointment + buffer)
+            if currentSlotStart >= blockedStart && currentSlotStart < blockedEnd {
                 return true
             }
             
-            // 2. Current slot ends during booked appointment
-            if currentSlotEnd > bookedSlot.startMinutes && currentSlotEnd <= bookedSlot.endMinutes {
+            // 2. Current slot ends during blocked period
+            if currentSlotEnd > blockedStart && currentSlotEnd <= blockedEnd {
                 return true
             }
             
-            // 3. Current slot completely contains booked appointment
-            if currentSlotStart <= bookedSlot.startMinutes && currentSlotEnd >= bookedSlot.endMinutes {
+            // 3. Current slot completely contains blocked period
+            if currentSlotStart <= blockedStart && currentSlotEnd >= blockedEnd {
                 return true
             }
             
-            // 4. Booked appointment completely contains current slot
-            if bookedSlot.startMinutes <= currentSlotStart && bookedSlot.endMinutes >= currentSlotEnd {
+            // 4. Blocked period completely contains current slot
+            if blockedStart <= currentSlotStart && blockedEnd >= currentSlotEnd {
                 return true
             }
         }
